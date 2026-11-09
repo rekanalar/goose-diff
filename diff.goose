@@ -17,6 +17,8 @@ import patch;
 import matcher;
 import tokens;
 import context;
+import cssdiff;
+import jsondiff;
 import ndiff;
 
 // The codes of the faults.
@@ -34,6 +36,7 @@ fn error_text(code: i64) -> const u8[:] {
     if code == ERR_NO_MATCH { return "a hunk matches no place in the text"; }
     if code == ERR_TOO_MUCH_WORK { return "the search for a hunk took too much work"; }
     if code == ERR_NO_FILE { return "the patch holds no such file"; }
+    if code == ERR_BAD_JSON { return "the text is not JSON"; }
     return "unknown code";
 }
 

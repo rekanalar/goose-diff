@@ -9,7 +9,7 @@ It finds the blocks of equal lines and the words that match a word best. It comp
 ## Install
 
 ```goose
-import diff from "rekanalar/goose-diff@v0.6.0";
+import diff from "rekanalar/goose-diff@v0.7.0";
 ```
 
 The package uses the standard library only. It has no other dependency.
@@ -24,6 +24,7 @@ The package uses the standard library only. It has no other dependency.
 | Python `difflib` | `ndiff` with the lines of hints, and `restore` |
 | Node `diff` (jsdiff) | `createPatch`, `applyPatch`, the reading of a patch, the reverse apply |
 | Node `diff` (jsdiff) | `diffChars`, `diffTrimmedLines`, `diffSentences`, `diffArrays`, the switches of the options |
+| Node `diff` (jsdiff) | `diffCss`, `diffJson`, and the canonical form of a JSON value |
 | Node `diff` (jsdiff) | `diffWords`, `diffWordsWithSpace`, the table of the word characters |
 | Rust `similar` | The unified output, the reading of a patch, the apply of a patch |
 | Go `go-difflib` | `GetUnifiedDiffString`, the writing of a unified diff |
@@ -36,6 +37,7 @@ The package uses the standard library only. It has no other dependency.
 - **The patch of several files.** One patch holds many files, each with many hunks. The reader skips the lines before a file header, such as `Index:` and `diff --git`.
 - **The apply of a patch.** The apply checks every context line and every removed line. It finds a hunk that sits at another line than its header says.
 - **The reverse apply.** The patch takes the text back to the form before the change.
+- **The CSS and JSON searches.** `diff_css` compares the tokens of a style sheet. `diff_json` writes both JSON texts in one canonical form with sorted keys, then compares the lines. A comma at the end of a line does not count.
 - **The context format.** `context_diff` writes the context diff of `difflib`. The hunks follow the rule `context`.
 - **The delta with hints.** `ndiff` writes the delta of `difflib`. A pair of close lines gets a line of hints that marks the changed characters. `ndiff_restore` takes one of the two texts back out of a delta.
 - **The close words.** The package finds the words that match a word best. It compares the words by their characters.
@@ -59,6 +61,10 @@ The package uses the standard library only. It has no other dependency.
 | `matcher_quick_ratio(a, b, o)` | Gives the quick ratio of the two texts. Gives a code and the ratio |
 | `matcher_real_quick_ratio(a, b, o)` | Gives the real quick ratio of the two texts. Gives a code and the ratio |
 | `context_diff(out, a, b, a_name, b_name, o)` | Adds the context diff of `a` against `b` to `out`. Gives a code and the minimality flag |
+| `diff_css(a, b, o, changes)` | Adds the changes of the CSS tokens of `a` against `b` to `changes`. Gives a code and the minimality flag |
+| `json_canonical(text, o, out)` | Adds the canonical form of a JSON text to `out`. Sorted keys, two blanks of indent, the numbers of JavaScript. Gives a code |
+| `diff_json(a, b, o, ca, cb, changes)` | Writes the canonical forms of `a` and `b` to `ca` and `cb`. Adds the changes of their lines to `changes`. Gives a code and the minimality flag |
+| `diff_json_text(a, b, o, changes)` | Compares two texts line by line. A comma at the end of a line does not count. Gives a code and the minimality flag |
 | `ndiff(a, b, o, out)` | Adds the delta of `a` against `b` to `out`. Lines of the first text begin with `- `, lines of the second with `+ `, shared lines with two blanks, hints with `? `. Gives a code |
 | `ndiff_restore(delta, which, out)` | Adds the lines of the text `which` (1 or 2) of a delta to `out`, without the codes. Gives a code |
 | `close_matches(word, cands, n, cutoff, out)` | Adds the places of the words that match the word best to `out`. Gives a code |
@@ -170,6 +176,7 @@ The rule `newline_is_token` changes the line searches only. The rule `ignore_whi
 | `ERR_NO_MATCH` | A hunk matches no place in the text |
 | `ERR_TOO_MUCH_WORK` | The search for a hunk took too much work |
 | `ERR_NO_FILE` | The patch holds no such file |
+| `ERR_BAD_JSON` | The text is not JSON |
 
 A call that fails leaves the buffer of the caller as it was.
 
@@ -177,7 +184,7 @@ A call that fails leaves the buffer of the caller as it was.
 
 ```goose
 import std;
-import diff from "rekanalar/goose-diff@v0.6.0";
+import diff from "rekanalar/goose-diff@v0.7.0";
 
 fn main() {
     var out: u8[>..] = [];
@@ -190,6 +197,12 @@ fn main() {
 
 ## Security
 
+- **The JSON writer holds no recursion.** It walks the tree with a stack in a buffer. A text of `[` repeated one million times cannot overflow the call stack. The Node library recurses and fails on deep input.
+- **The canonical text has a size cap.** It may not pass eight times the rule `max_input`. A deep text has an output of the order of its depth squared, because every level adds an indent. The cap gives `ERR_TOO_LARGE` instead.
+- **The call `diff_json` caps each canonical text at `max_input`.** It stops at the cap before it compares. A deep pair cannot cost memory for a result that the call then refuses.
+- **The keys sort once per object.** The sort costs the order of n log n. An object of many equal keys keeps one key.
+- **The JSON parser is the parser of the standard library.** It reads RFC 8259 text only. A text with a comment, a trailing comma or a bare word gives `ERR_BAD_JSON`.
+- **A failed JSON call changes nothing.** `json_canonical` and `diff_json` build their output apart. They copy it after every check passes.
 - **The delta spends from a budget.** The search counts the length of every pair of lines and every compare. It stops at `max_work` and gives `ERR_TOO_MUCH_WORK`. A block of near lines cannot make it run forever. The Python library `difflib` has no such bound.
 - **The delta looks ten lines to each side.** The close pair search stays inside a window of ten lines. So the work grows with the count of lines, not with its square.
 - **A delta line always ends in a line end.** Python joins an unended last line to the next code. The package adds one.
@@ -218,6 +231,13 @@ Risks that stay: the package reads a patch and a text from the caller. It does n
 
 ## Limits
 
+- **The JSON search takes text.** The Node library takes a value. The package takes a JSON text. Build the text with the standard library. A JSON string at the top is a string in the output. The Node library takes a string as a text that is already written.
+- **The numbers follow JavaScript.** A number reads as a double. An integer above 2^53 loses its low digits, as in JavaScript. A number that is not finite gives `null`. The text of the number comes from the shortest form of the standard library.
+- **The keys sort as in JavaScript.** The keys that are array indexes come first, in the order of their values. The other keys follow in the order of the UTF-16 code units. A key with a half of a surrogate pair can sort in another place. Keys with the same code points but other broken bytes sort by their bytes.
+- **Equal lines may come as several changes.** The Node library joins the longer lines into one change. The package gives one change for each part from one text.
+- **The JSON search needs memory for every value.** A value costs about 80 bytes. A 16 MiB document of small values may take over a gigabyte. Lower `max_input` to bound it.
+- **The replacer of the Node library is out.** The options `stringifyReplacer` and `undefinedReplacement` have no meaning for a JSON text.
+- **Bytes that are no UTF-8 pass through.** The Node library works on UTF-16 strings and cannot hold such bytes.
 - **The context diff holds no time stamp.** `difflib` takes a date for each file. The package writes only the names. Put the date in the name when you need one.
 - **The context diff marks a line without a line end.** `difflib` writes the line as it is. The package adds a line end and the marker line of GNU `diff`.
 - **The hints count code points.** A mark stands under one code point, as in Python. A broken byte counts as one code point. A terminal may show a wide character in two columns, so the marks may not line up.

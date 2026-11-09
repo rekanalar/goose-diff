@@ -253,12 +253,43 @@ fn tok_change(changes: Change[>..]&, toks: const Span[:], from: i64, to: i64,
                           count: to - from, text: text, added: added, removed: removed });
 }
 
+// tok_longest adds the changes of one run of equal tokens. Each pair of
+// equal tokens keeps the longer token of the two. A run that takes its
+// tokens from one text is one change.
+fn tok_longest(changes: Change[>..]&, ta: const Span[:], tb: const Span[:], op: Op) {
+    var run_from: i64 = op.b_lo;
+    var run_text: i64 = -1;
+    for j in op.b_lo..op.b_hi {
+        let i = op.a_lo + (j - op.b_lo);
+        var side: i64 = 1;
+        if ta[i].len > tb[j].len { side = 0; }
+        if run_text >= 0 && side != run_text {
+            tok_run_change(changes, ta, tb, op, run_from, j, run_text);
+            run_from = j;
+        }
+        run_text = side;
+    }
+    if run_text >= 0 { tok_run_change(changes, ta, tb, op, run_from, op.b_hi, run_text); }
+}
+
+// tok_run_change adds one change for the equal tokens from..to of the
+// second text. The text 0 takes the tokens of the first text.
+fn tok_run_change(changes: Change[>..]&, ta: const Span[:], tb: const Span[:], op: Op,
+                  from: i64, to: i64, text: i64) {
+    if text == 1 {
+        tok_change(changes, tb, from, to, 1, false, false);
+    } else {
+        let shift = op.a_lo - op.b_lo;
+        tok_change(changes, ta, from + shift, to + shift, 0, false, false);
+    }
+}
+
 // tok_changes turns the opcodes of the search into the changes. The
 // parts `sa` and `sb` are the parts that the search compares. The parts
 // `ta` and `tb` are the tokens of the texts.
 fn tok_changes(a: const u8[:], ta: const Span[:], sa: const Span[:],
                b: const u8[:], tb: const Span[:], sb: const Span[:],
-               o: TokenOptions, changes: Change[>..]&) -> i64, bool {
+               o: TokenOptions, longest: bool, changes: Change[>..]&) -> i64, bool {
     var ida: i32[>..] = [];
     var idb: i32[>..] = [];
     intern(a, sa, b, sb, ida, idb, tok_compare(o));
@@ -275,7 +306,11 @@ fn tok_changes(a: const u8[:], ta: const Span[:], sa: const Span[:],
     }
     for op in ops {
         if op.tag == OP_EQUAL {
-            tok_change(changes, tb, op.b_lo, op.b_hi, 1, false, false);
+            if longest {
+                tok_longest(changes, ta, tb, op);
+            } else {
+                tok_change(changes, tb, op.b_lo, op.b_hi, 1, false, false);
+            }
         } else if op.tag == OP_DELETE {
             tok_change(changes, ta, op.a_lo, op.a_hi, 0, false, true);
         } else if op.tag == OP_INSERT {
@@ -296,13 +331,13 @@ fn tok_run(a: const u8[:], ta: const Span[:], b: const u8[:], tb: const Span[:],
            o: TokenOptions, trim: bool, changes: Change[>..]&) -> i64, bool {
     if ta.len + tb.len > o.max_tokens { return ERR_TOO_LARGE, false; }
     if !trim {
-        return tok_changes(a, ta[..], ta[..], b, tb[..], tb[..], o, changes);
+        return tok_changes(a, ta[..], ta[..], b, tb[..], tb[..], o, false, changes);
     }
     var sa: Span[>..] = [];
     var sb: Span[>..] = [];
     tok_same(a, ta[..], true, o, sa);
     tok_same(b, tb[..], true, o, sb);
-    return tok_changes(a, ta[..], sa[..], b, tb[..], sb[..], o, changes);
+    return tok_changes(a, ta[..], sa[..], b, tb[..], sb[..], o, false, changes);
 }
 
 // diff_chars adds the changes of a against b to `changes`. The search
@@ -783,7 +818,7 @@ fn diff_words(a: const u8[:], b: const u8[:], o: TokenOptions, changes: Change[>
     var sb: Span[>..] = [];
     for t in ta { sa.push(tok_trim(a, t)); }
     for t in tb { sb.push(tok_trim(b, t)); }
-    let code, exact = tok_changes(a, ta[..], sa[..], b, tb[..], sb[..], o, changes);
+    let code, exact = tok_changes(a, ta[..], sa[..], b, tb[..], sb[..], o, false, changes);
     if code != ERR_OK { return code, false; }
     tok_dedupe(changes, start, a, b);
     return ERR_OK, exact;
@@ -848,7 +883,7 @@ fn diff_words_with_space(a: const u8[:], b: const u8[:], o: TokenOptions, change
     var tb: Span[>..] = [];
     if !tok_parts(a, o, true, ta) || !tok_parts(b, o, true, tb) { return ERR_TOO_LARGE, false; }
     if ta.len + tb.len > o.max_tokens { return ERR_TOO_LARGE, false; }
-    return tok_changes(a, ta[..], ta[..], b, tb[..], tb[..], o, changes);
+    return tok_changes(a, ta[..], ta[..], b, tb[..], tb[..], o, false, changes);
 }
 
 // tok_span_ok tells whether a span of a token stands inside its text.
