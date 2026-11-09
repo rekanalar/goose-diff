@@ -18,6 +18,7 @@ import matcher;
 import tokens;
 import context;
 import cssdiff;
+import algos;
 import jsondiff;
 import ndiff;
 
@@ -49,7 +50,7 @@ struct Options {
     max_edits: i64,
     // The most bytes of one input.
     max_input: i64,
-    // The search of the diff: ALG_MYERS or ALG_RO.
+    // The search of the diff: ALG_MYERS, ALG_RO, ALG_PATIENCE or ALG_LCS.
     algorithm: i64,
     // The junk rule of the matcher: JUNK_NONE, JUNK_BLANK or JUNK_COMMENT.
     junk: i64,
@@ -95,7 +96,7 @@ const MAX_TOKENS: i64 = 8000000;
 fn search_ok(max_edits: i64, max_input: i64, algorithm: i64, max_work: i64,
              max_tokens: i64) -> bool {
     return max_edits >= 1 && max_edits <= MAX_EDITS && max_input >= 0 &&
-           (algorithm == ALG_MYERS || algorithm == ALG_RO) &&
+           (algorithm >= ALG_MYERS && algorithm <= ALG_LCS) &&
            max_work >= 0 && max_work <= MAX_WORK &&
            max_tokens >= 1 && max_tokens <= MAX_TOKENS;
 }
@@ -137,7 +138,8 @@ fn diff_lines(a: const u8[:], b: const u8[:], o: Options, ops: Op[>..]&) -> i64,
     }
     let code = lines_of(a, b, la, lb, ida, idb, o);
     if code != ERR_OK { return code, false; }
-    let exact = diff_ids(ida[..], idb[..], o.max_edits, o.max_work, ops);
+    let acode, exact = diff_ids_alg(ida[..], idb[..], o.algorithm, o.max_edits, o.max_work, ops);
+    if acode != ERR_OK { return acode, false; }
     return ERR_OK, exact;
 }
 
@@ -159,7 +161,9 @@ fn output_ops(a: const u8[:], b: const u8[:], o: Options, la: Span[>..]&, lb: Sp
     } else {
         let code = lines_of(a, b, la, lb, ida, idb, o);
         if code != ERR_OK { return code, false; }
-        exact = diff_ids(ida[..], idb[..], o.max_edits, o.max_work, ops);
+        let acode, minimal = diff_ids_alg(ida[..], idb[..], o.algorithm, o.max_edits, o.max_work, ops);
+        if acode != ERR_OK { return acode, false; }
+        exact = minimal;
     }
     return ERR_OK, exact;
 }

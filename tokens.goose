@@ -30,7 +30,7 @@ struct TokenOptions {
     max_edits: i64,
     // The most bytes of one input.
     max_input: i64,
-    // The search of the diff: ALG_MYERS or ALG_RO.
+    // The search of the diff: ALG_MYERS, ALG_RO, ALG_PATIENCE or ALG_LCS.
     algorithm: i64,
     // The most compares that the search spends.
     max_work: i64,
@@ -302,7 +302,9 @@ fn tok_changes(a: const u8[:], ta: const Span[:], sa: const Span[:],
         if code != ERR_OK { return code, false; }
         exact = minimal;
     } else {
-        exact = diff_ids(ida[..], idb[..], o.max_edits, o.max_work, ops);
+        let acode, minimal = diff_ids_alg(ida[..], idb[..], o.algorithm, o.max_edits, o.max_work, ops);
+        if acode != ERR_OK { return acode, false; }
+        exact = minimal;
     }
     for op in ops {
         if op.tag == OP_EQUAL {

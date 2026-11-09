@@ -9,7 +9,7 @@ It finds the blocks of equal lines and the words that match a word best. It comp
 ## Install
 
 ```goose
-import diff from "rekanalar/goose-diff@v0.7.0";
+import diff from "rekanalar/goose-diff@v0.8.0";
 ```
 
 The package uses the standard library only. It has no other dependency.
@@ -26,6 +26,7 @@ The package uses the standard library only. It has no other dependency.
 | Node `diff` (jsdiff) | `diffChars`, `diffTrimmedLines`, `diffSentences`, `diffArrays`, the switches of the options |
 | Node `diff` (jsdiff) | `diffCss`, `diffJson`, and the canonical form of a JSON value |
 | Node `diff` (jsdiff) | `diffWords`, `diffWordsWithSpace`, the table of the word characters |
+| Rust `similar` | The Myers, Patience and LCS searches (`Algorithm::Myers`, `Algorithm::Patience`, `Algorithm::Lcs`) |
 | Rust `similar` | The unified output, the reading of a patch, the apply of a patch |
 | Go `go-difflib` | `GetUnifiedDiffString`, the writing of a unified diff |
 
@@ -37,6 +38,7 @@ The package uses the standard library only. It has no other dependency.
 - **The patch of several files.** One patch holds many files, each with many hunks. The reader skips the lines before a file header, such as `Index:` and `diff --git`.
 - **The apply of a patch.** The apply checks every context line and every removed line. It finds a hunk that sits at another line than its header says.
 - **The reverse apply.** The patch takes the text back to the form before the change.
+- **Four searches.** The rule `algorithm` takes `ALG_MYERS`, `ALG_RO` (the matcher of `difflib`), `ALG_PATIENCE` and `ALG_LCS`. The Patience search matches the Rust crate `similar` step by step.
 - **The CSS and JSON searches.** `diff_css` compares the tokens of a style sheet. `diff_json` writes both JSON texts in one canonical form with sorted keys, then compares the lines. A comma at the end of a line does not count.
 - **The context format.** `context_diff` writes the context diff of `difflib`. The hunks follow the rule `context`.
 - **The delta with hints.** `ndiff` writes the delta of `difflib`. A pair of close lines gets a line of hints that marks the changed characters. `ndiff_restore` takes one of the two texts back out of a delta.
@@ -184,7 +186,7 @@ A call that fails leaves the buffer of the caller as it was.
 
 ```goose
 import std;
-import diff from "rekanalar/goose-diff@v0.7.0";
+import diff from "rekanalar/goose-diff@v0.8.0";
 
 fn main() {
     var out: u8[>..] = [];
@@ -197,6 +199,9 @@ fn main() {
 
 ## Security
 
+- **The Patience search spends from a budget.** It counts the rounds and the compares of its Myers searches. At `max_work` the range that is left becomes one replace. The diff stays valid, but not minimal. The call says so with its flag.
+- **The LCS table has a cap.** The table holds at most 16777216 cells, which is 64 MB. A pair of texts that needs more gives `ERR_TOO_MUCH_WORK`. So does a table past `max_work`. The Rust crate holds the table in a map with no cap. Memory grows with the product of the two lengths.
+- **The Patience search maps the ids onto a dense range.** It gives every distinct id a place in a map. The map holds one slot per distinct id. A caller may pass ids of any value, even a negative one. No id can reach past the arrays of the counts.
 - **The JSON writer holds no recursion.** It walks the tree with a stack in a buffer. A text of `[` repeated one million times cannot overflow the call stack. The Node library recurses and fails on deep input.
 - **The canonical text has a size cap.** It may not pass eight times the rule `max_input`. A deep text has an output of the order of its depth squared, because every level adds an indent. The cap gives `ERR_TOO_LARGE` instead.
 - **The call `diff_json` caps each canonical text at `max_input`.** It stops at the cap before it compares. A deep pair cannot cost memory for a result that the call then refuses.
@@ -231,6 +236,11 @@ Risks that stay: the package reads a patch and a text from the caller. It does n
 
 ## Limits
 
+- **The Myers search of the package differs from `similar`.** Both give a minimal diff. They pick other anchors when more than one diff is minimal. The Patience search runs the Myers search of `similar` over its gaps, so it matches the crate on every case.
+- **The LCS search fixes a fault of the crate.** `similar` starts the table at the first line. It should start after the common start. The diff may then miss the longest subsequence. The package builds the table after the common start. It always gives the longest. The outputs differ on about one random case in six.
+- **The flag of the Patience search is strict.** Patience does not promise the smallest diff. The flag is true only when the check of the minimality finds that it is the smallest. The check runs on small texts only.
+- **The Patience search needs memory for its Myers search.** Two arrays hold the furthest points. They cost about 16 bytes per line.
+- **The deadline of `similar` is the budget here.** The crate stops by the clock. The package stops by the count of steps, so a result does not depend on the speed of the machine.
 - **The JSON search takes text.** The Node library takes a value. The package takes a JSON text. Build the text with the standard library. A JSON string at the top is a string in the output. The Node library takes a string as a text that is already written.
 - **The numbers follow JavaScript.** A number reads as a double. An integer above 2^53 loses its low digits, as in JavaScript. A number that is not finite gives `null`. The text of the number comes from the shortest form of the standard library.
 - **The keys sort as in JavaScript.** The keys that are array indexes come first, in the order of their values. The other keys follow in the order of the UTF-16 code units. A key with a half of a surrogate pair can sort in another place. Keys with the same code points but other broken bytes sort by their bytes.
