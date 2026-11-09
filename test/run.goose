@@ -750,6 +750,112 @@ fn test_token_bounds() {
     assert(!exact);
 }
 
+fn test_token_words() {
+    // The changes of the word search. The white space between the words
+    // does not matter to the search.
+    var changes: diff::Change[>..] = [];
+    let o = diff::default_token_options();
+    assert(diff::diff_words("hello world"[..], "hello there"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 3);
+    assert(check_change(changes[0], 0, 6, 1, 1, false, false));
+    assert(check_change(changes[1], 6, 5, 1, 0, false, true));
+    assert(check_change(changes[2], 6, 5, 1, 1, true, false));
+    // A word in the middle.
+    clear_changes(changes);
+    assert(diff::diff_words("foo bar baz"[..], "foo qux baz"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 4);
+    assert(check_change(changes[0], 0, 4, 1, 1, false, false));
+    assert(check_change(changes[1], 4, 3, 1, 0, false, true));
+    assert(check_change(changes[2], 4, 3, 1, 1, true, false));
+    assert(check_change(changes[3], 7, 4, 1, 1, false, false));
+    // The white space between the words does not matter.
+    clear_changes(changes);
+    assert(diff::diff_words("a  b"[..], "a b"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 1);
+    assert(check_change(changes[0], 0, 3, 2, 1, false, false));
+    // The line end is a part of the white space.
+    clear_changes(changes);
+    assert(diff::diff_words("foo\nbar baz"[..], "foo baz"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 3);
+    assert(check_change(changes[0], 0, 3, 1, 1, false, false));
+    assert(check_change(changes[1], 3, 4, 1, 0, false, true));
+    assert(check_change(changes[2], 3, 4, 1, 1, false, false));
+    // A word with a letter outside ASCII.
+    clear_changes(changes);
+    assert(diff::diff_words("caf\xC3\xA9 noir"[..], "caf\xC3\xA9 blanc"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 3);
+    assert(check_change(changes[0], 0, 6, 1, 1, false, false));
+    assert(check_change(changes[1], 6, 4, 1, 0, false, true));
+    assert(check_change(changes[2], 6, 5, 1, 1, true, false));
+}
+
+fn test_token_words_with_space() {
+    // The changes of the word search with space. The white space between
+    // the words matters to the search.
+    var changes: diff::Change[>..] = [];
+    let o = diff::default_token_options();
+    assert(diff::diff_words_with_space("hello world"[..], "hello there"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 3);
+    assert(check_change(changes[0], 0, 6, 2, 1, false, false));
+    assert(check_change(changes[1], 6, 5, 1, 0, false, true));
+    assert(check_change(changes[2], 6, 5, 1, 1, true, false));
+    // The white space between the words matters.
+    clear_changes(changes);
+    assert(diff::diff_words_with_space("a  b"[..], "a b"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 4);
+    assert(check_change(changes[0], 0, 1, 1, 1, false, false));
+    assert(check_change(changes[1], 1, 2, 1, 0, false, true));
+    assert(check_change(changes[2], 1, 1, 1, 1, true, false));
+    assert(check_change(changes[3], 2, 1, 1, 1, false, false));
+    // The line end is a token of its own.
+    clear_changes(changes);
+    assert(diff::diff_words_with_space("foo\nbar baz"[..], "foo baz"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 3);
+    assert(check_change(changes[0], 0, 3, 1, 1, false, false));
+    assert(check_change(changes[1], 3, 4, 2, 0, false, true));
+    assert(check_change(changes[2], 3, 4, 2, 1, false, false));
+    // A word with a letter outside ASCII.
+    clear_changes(changes);
+    assert(diff::diff_words_with_space("caf\xC3\xA9 noir"[..], "caf\xC3\xA9 blanc"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 3);
+    assert(check_change(changes[0], 0, 6, 2, 1, false, false));
+    assert(check_change(changes[1], 6, 4, 1, 0, false, true));
+    assert(check_change(changes[2], 6, 5, 1, 1, true, false));
+}
+
+fn test_token_word_bounds() {
+    var changes: diff::Change[>..] = [];
+    let o = diff::default_token_options();
+    // More words than the rule allows is a fault.
+    var ob = diff::default_token_options();
+    ob.max_tokens = 1;
+    assert(diff::diff_words("a b"[..], "a b"[..], ob, changes) == diff::ERR_TOO_LARGE);
+    assert(changes.len == 0);
+    assert(diff::diff_words_with_space("a b"[..], "a b"[..], ob, changes) == diff::ERR_TOO_LARGE);
+    assert(changes.len == 0);
+    // A rule out of range is a fault.
+    var ob2 = diff::default_token_options();
+    ob2.max_edits = 0;
+    assert(diff::diff_words("a"[..], "b"[..], ob2, changes) == diff::ERR_BAD_OPTION);
+    assert(changes.len == 0);
+    // An empty text gives no change.
+    let o2 = diff::default_token_options();
+    assert(diff::diff_words(""[..], ""[..], o2, changes) == diff::ERR_OK);
+    assert(changes.len == 0);
+    // The move of the white space sees only the changes of this call.
+    // A change of an earlier call stays as it is.
+    let long = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    assert(diff::diff_words(long[..], "aaa"[..], o2, changes) == diff::ERR_OK);
+    let after = changes.len;
+    assert(diff::diff_words("y"[..], " x"[..], o2, changes) == diff::ERR_OK);
+    assert(changes.len == after + 2);
+    // A carriage return that stands alone is a part of its own.
+    clear_changes(changes);
+    assert(diff::diff_words_with_space("x\r"[..], "x\r"[..], o2, changes) == diff::ERR_OK);
+    assert(changes.len == 1);
+    assert(check_change(changes[0], 0, 2, 2, 1, false, false));
+}
+
 fn main() {
     test_basic();
     test_random();
@@ -775,5 +881,8 @@ fn main() {
     test_token_switches();
     test_token_broken();
     test_token_bounds();
+    test_token_words();
+    test_token_words_with_space();
+    test_token_word_bounds();
     print("all diff tests pass\n");
 }

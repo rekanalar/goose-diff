@@ -41,4 +41,18 @@ fn main() {
     let code3 = diff::diff_sentences(a, b, o, changes);
     print("code    : ", diff::error_text(code3), "\n");
     show_changes(changes[..], a, b);
+
+    // The word search. The white space between the words does not matter
+    // to the search.
+    changes.resize(0, diff::Change { at: 0, len: 0, count: 0, text: 0, added: false, removed: false });
+    let code4 = diff::diff_words(a, b, o, changes);
+    print("code    : ", diff::error_text(code4), "\n");
+    show_changes(changes[..], a, b);
+
+    // The word search with space. The white space between the words
+    // matters to the search.
+    changes.resize(0, diff::Change { at: 0, len: 0, count: 0, text: 0, added: false, removed: false });
+    let code5 = diff::diff_words_with_space(a, b, o, changes);
+    print("code    : ", diff::error_text(code5), "\n");
+    show_changes(changes[..], a, b);
 }
