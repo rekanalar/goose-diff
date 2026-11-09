@@ -14,6 +14,7 @@ import lines;
 import myers;
 import unified;
 import patch;
+import matcher;
 
 // The codes of the faults.
 const ERR_OK: i64 = 0;
@@ -42,11 +43,22 @@ struct Options {
     max_edits: i64,
     // The most bytes of one input.
     max_input: i64,
+    // The search of the diff: ALG_MYERS or ALG_RO.
+    algorithm: i64,
+    // The junk rule of the matcher: JUNK_NONE, JUNK_BLANK or JUNK_COMMENT.
+    junk: i64,
+    // The popular rule of the matcher. It drops a line that appears
+    // often in the second text.
+    autojunk: bool,
+    // The most compares that the search spends.
+    max_work: i64,
 }
 
 // default_options gives 3 lines of context, 2000 edits and 16 MiB.
 fn default_options() -> Options {
-    return Options { context: 3, max_edits: 2000, max_input: 16777216 };
+    return Options { context: 3, max_edits: 2000, max_input: 16777216,
+                     algorithm: ALG_MYERS, junk: JUNK_NONE, autojunk: true,
+                     max_work: 50000000 };
 }
 
 // The most context lines that one call takes. A larger value would wrap
@@ -58,10 +70,16 @@ const MAX_CONTEXT: i64 = 1073741824;
 // memory of one call at about 36 MB.
 const MAX_EDITS: i64 = 3000;
 
+// The most compares that one search spends.
+const MAX_WORK: i64 = 500000000;
+
 // options_ok tells whether the options are in range.
 fn options_ok(o: Options) -> bool {
     return o.context >= 0 && o.context <= MAX_CONTEXT &&
-           o.max_edits >= 1 && o.max_edits <= MAX_EDITS && o.max_input >= 0;
+           o.max_edits >= 1 && o.max_edits <= MAX_EDITS && o.max_input >= 0 &&
+           (o.algorithm == ALG_MYERS || o.algorithm == ALG_RO) &&
+           o.junk >= JUNK_NONE && o.junk <= JUNK_COMMENT &&
+           o.max_work >= 0 && o.max_work <= MAX_WORK;
 }
 
 // lines_of splits two texts into lines and gives an id to every line.
@@ -74,6 +92,7 @@ fn lines_of(a: const u8[:], b: const u8[:], la: Span[>..]&, lb: Span[>..]&,
 
 // diff_lines adds the opcodes of a against b to `ops`, line by line. It
 // gives a code and a flag. The flag is true when the diff is minimal.
+// The rule `algorithm` names the search.
 fn diff_lines(a: const u8[:], b: const u8[:], o: Options, ops: Op[>..]&) -> i64, bool {
     if !options_ok(o) { return ERR_BAD_OPTION, false; }
     if a.len > o.max_input || b.len > o.max_input { return ERR_TOO_LARGE, false; }
@@ -81,6 +100,11 @@ fn diff_lines(a: const u8[:], b: const u8[:], o: Options, ops: Op[>..]&) -> i64,
     var lb: Span[>..] = [];
     var ida: i32[>..] = [];
     var idb: i32[>..] = [];
+    if o.algorithm == ALG_RO {
+        var junk: u8[>..] = [];
+        ro_prepare(a, b, o, la, lb, ida, idb, junk);
+        return ro_ops(ida[..], idb[..], junk[..], o, ops);
+    }
     lines_of(a, b, la, lb, ida, idb);
     let exact = diff_ids(ida[..], idb[..], o.max_edits, ops);
     return ERR_OK, exact;
@@ -88,7 +112,8 @@ fn diff_lines(a: const u8[:], b: const u8[:], o: Options, ops: Op[>..]&) -> i64,
 
 // unified_diff appends the unified diff of a against b to `out`. The
 // names go in the two header lines. Equal texts give no output. It gives
-// a code and a flag. The flag is true when the diff is minimal.
+// a code and a flag. The flag is true when the diff is minimal. The rule
+// `algorithm` names the search.
 fn unified_diff(out: u8[>..]&, a: const u8[:], b: const u8[:], a_name: const u8[:], b_name: const u8[:],
                 o: Options) -> i64, bool {
     if !options_ok(o) { return ERR_BAD_OPTION, false; }
@@ -98,9 +123,18 @@ fn unified_diff(out: u8[>..]&, a: const u8[:], b: const u8[:], a_name: const u8[
     var lb: Span[>..] = [];
     var ida: i32[>..] = [];
     var idb: i32[>..] = [];
-    lines_of(a, b, la, lb, ida, idb);
     var ops: Op[>..] = [];
-    let exact = diff_ids(ida[..], idb[..], o.max_edits, ops);
+    var exact = false;
+    if o.algorithm == ALG_RO {
+        var junk: u8[>..] = [];
+        ro_prepare(a, b, o, la, lb, ida, idb, junk);
+        let code, minimal = ro_ops(ida[..], idb[..], junk[..], o, ops);
+        if code != ERR_OK { return code, false; }
+        exact = minimal;
+    } else {
+        lines_of(a, b, la, lb, ida, idb);
+        exact = diff_ids(ida[..], idb[..], o.max_edits, ops);
+    }
     write_unified(out, a, la[..], b, lb[..], ops[..], a_name, b_name, o.context);
     return ERR_OK, exact;
 }
