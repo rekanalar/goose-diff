@@ -15,6 +15,7 @@ import myers;
 import unified;
 import patch;
 import matcher;
+import tokens;
 
 // The codes of the faults.
 const ERR_OK: i64 = 0;
@@ -52,13 +53,18 @@ struct Options {
     autojunk: bool,
     // The most compares that the search spends.
     max_work: i64,
+    // The carriage return before a line feed does not matter.
+    strip_trailing_cr: bool,
+    // The most lines of the two texts. Past it, the call is a fault.
+    max_tokens: i64,
 }
 
 // default_options gives 3 lines of context, 2000 edits and 16 MiB.
 fn default_options() -> Options {
     return Options { context: 3, max_edits: 2000, max_input: 16777216,
                      algorithm: ALG_MYERS, junk: JUNK_NONE, autojunk: true,
-                     max_work: 50000000 };
+                     max_work: 50000000, strip_trailing_cr: false,
+                     max_tokens: 2000000 };
 }
 
 // The most context lines that one call takes. A larger value would wrap
@@ -73,21 +79,39 @@ const MAX_EDITS: i64 = 3000;
 // The most compares that one search spends.
 const MAX_WORK: i64 = 500000000;
 
+// The most lines or tokens of the two texts of one call. The lines and
+// the tokens hold memory of their own, so the count stays bounded. The
+// cap keeps the memory of one call at about 600 MB. The default of two
+// million keeps it at about 160 MB.
+const MAX_TOKENS: i64 = 8000000;
+
+// search_ok tells whether the rules of a search are in range. The rules
+// of the matcher and the rules of a token search share them.
+fn search_ok(max_edits: i64, max_input: i64, algorithm: i64, max_work: i64,
+             max_tokens: i64) -> bool {
+    return max_edits >= 1 && max_edits <= MAX_EDITS && max_input >= 0 &&
+           (algorithm == ALG_MYERS || algorithm == ALG_RO) &&
+           max_work >= 0 && max_work <= MAX_WORK &&
+           max_tokens >= 1 && max_tokens <= MAX_TOKENS;
+}
+
 // options_ok tells whether the options are in range.
 fn options_ok(o: Options) -> bool {
     return o.context >= 0 && o.context <= MAX_CONTEXT &&
-           o.max_edits >= 1 && o.max_edits <= MAX_EDITS && o.max_input >= 0 &&
-           (o.algorithm == ALG_MYERS || o.algorithm == ALG_RO) &&
            o.junk >= JUNK_NONE && o.junk <= JUNK_COMMENT &&
-           o.max_work >= 0 && o.max_work <= MAX_WORK;
+           search_ok(o.max_edits, o.max_input, o.algorithm, o.max_work, o.max_tokens);
 }
 
 // lines_of splits two texts into lines and gives an id to every line.
+// The count of the lines stays under the limit. It gives a code.
 fn lines_of(a: const u8[:], b: const u8[:], la: Span[>..]&, lb: Span[>..]&,
-            ida: i32[>..]&, idb: i32[>..]&) {
+            ida: i32[>..]&, idb: i32[>..]&, o: Options) -> i64 {
     split_lines(a, la);
     split_lines(b, lb);
-    intern(a, la[..], b, lb[..], ida, idb);
+    if la.len + lb.len > o.max_tokens { return ERR_TOO_LARGE; }
+    intern(a, la[..], b, lb[..], ida, idb,
+           Compare { fold: false, strip_cr: o.strip_trailing_cr });
+    return ERR_OK;
 }
 
 // diff_lines adds the opcodes of a against b to `ops`, line by line. It
@@ -102,11 +126,13 @@ fn diff_lines(a: const u8[:], b: const u8[:], o: Options, ops: Op[>..]&) -> i64,
     var idb: i32[>..] = [];
     if o.algorithm == ALG_RO {
         var junk: u8[>..] = [];
-        ro_prepare(a, b, o, la, lb, ida, idb, junk);
-        return ro_ops(ida[..], idb[..], junk[..], o, ops);
+        let pcode = ro_prepare(a, b, o, la, lb, ida, idb, junk);
+        if pcode != ERR_OK { return pcode, false; }
+        return ro_ops(ida[..], idb[..], junk[..], o.autojunk, o.max_work, ops);
     }
-    lines_of(a, b, la, lb, ida, idb);
-    let exact = diff_ids(ida[..], idb[..], o.max_edits, ops);
+    let code = lines_of(a, b, la, lb, ida, idb, o);
+    if code != ERR_OK { return code, false; }
+    let exact = diff_ids(ida[..], idb[..], o.max_edits, o.max_work, ops);
     return ERR_OK, exact;
 }
 
@@ -127,13 +153,15 @@ fn unified_diff(out: u8[>..]&, a: const u8[:], b: const u8[:], a_name: const u8[
     var exact = false;
     if o.algorithm == ALG_RO {
         var junk: u8[>..] = [];
-        ro_prepare(a, b, o, la, lb, ida, idb, junk);
-        let code, minimal = ro_ops(ida[..], idb[..], junk[..], o, ops);
+        let pcode = ro_prepare(a, b, o, la, lb, ida, idb, junk);
+        if pcode != ERR_OK { return pcode, false; }
+        let code, minimal = ro_ops(ida[..], idb[..], junk[..], o.autojunk, o.max_work, ops);
         if code != ERR_OK { return code, false; }
         exact = minimal;
     } else {
-        lines_of(a, b, la, lb, ida, idb);
-        exact = diff_ids(ida[..], idb[..], o.max_edits, ops);
+        let code = lines_of(a, b, la, lb, ida, idb, o);
+        if code != ERR_OK { return code, false; }
+        exact = diff_ids(ida[..], idb[..], o.max_edits, o.max_work, ops);
     }
     write_unified(out, a, la[..], b, lb[..], ops[..], a_name, b_name, o.context);
     return ERR_OK, exact;

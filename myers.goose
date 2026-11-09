@@ -26,8 +26,10 @@ struct Op {
 // myers_moves finds a shortest edit script for a[a_lo..a_hi] against
 // b[b_lo..b_hi]. It adds one move per step to `moves`: 0 for a common
 // element, 1 for a delete from a and 2 for an insert from b. It gives
-// false when the bound max_edits stops the search and adds nothing.
-fn myers_moves(a: const i32[:], b: const i32[:], max_edits: i64, moves: u8[>..]&) -> bool {
+// false when the bound max_edits or the bound max_work stops the search
+// and adds nothing.
+fn myers_moves(a: const i32[:], b: const i32[:], max_edits: i64, max_work: i64,
+               moves: u8[>..]&) -> bool {
     let n = a.len;
     let m = b.len;
     var dmax = n + m;
@@ -39,6 +41,7 @@ fn myers_moves(a: const i32[:], b: const i32[:], max_edits: i64, moves: u8[>..]&
     var trace: i32[>..] = [];
     var found: i64 = -1;
     var d: i64 = 0;
+    var work: i64 = 0;
     while d <= dmax && found < 0 {
         var kk: i64 = -d;
         while kk <= d {
@@ -47,6 +50,8 @@ fn myers_moves(a: const i32[:], b: const i32[:], max_edits: i64, moves: u8[>..]&
         }
         var k: i64 = -d;
         while k <= d && found < 0 {
+            work = work + 1;
+            if work > max_work { return false; }
             var x: i64 = 0;
             if k == -d || (k != d && v[off + k - 1] < v[off + k + 1]) {
                 x = v[off + k + 1];
@@ -55,6 +60,8 @@ fn myers_moves(a: const i32[:], b: const i32[:], max_edits: i64, moves: u8[>..]&
             }
             var y = x - k;
             while x < n && y < m && a[x] == b[y] {
+                work = work + 1;
+                if work > max_work { return false; }
                 x = x + 1;
                 y = y + 1;
             }
@@ -113,9 +120,11 @@ fn myers_moves(a: const i32[:], b: const i32[:], max_edits: i64, moves: u8[>..]&
 }
 
 // diff_ids adds the opcodes of a against b to `ops`. It gives false when
-// the bound on edits was hit. The opcodes are then valid but not minimal:
-// the part between the common start and the common end is one replace.
-fn diff_ids(a: const i32[:], b: const i32[:], max_edits: i64, ops: Op[>..]&) -> bool {
+// the bound on edits or the bound on work was hit. The opcodes are then
+// valid but not minimal: the part between the common start and the
+// common end is one replace.
+fn diff_ids(a: const i32[:], b: const i32[:], max_edits: i64, max_work: i64,
+            ops: Op[>..]&) -> bool {
     let na = a.len;
     let nb = b.len;
     var pre: i64 = 0;
@@ -129,7 +138,7 @@ fn diff_ids(a: const i32[:], b: const i32[:], max_edits: i64, ops: Op[>..]&) -> 
     if n == 0 || m == 0 {
         for i in n { moves.push(1); }
         for i in m { moves.push(2); }
-    } else if !myers_moves(a[pre..na - suf], b[pre..nb - suf], max_edits, moves) {
+    } else if !myers_moves(a[pre..na - suf], b[pre..nb - suf], max_edits, max_work, moves) {
         exact = false;
         for i in n { moves.push(1); }
         for i in m { moves.push(2); }

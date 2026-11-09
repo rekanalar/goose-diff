@@ -30,7 +30,7 @@ fn lcs_len(a: const u8[:], b: const u8[:]) -> i64 {
     for i in la.len {
         cur[0] = 0;
         for j in lb.len {
-            if diff::span_equal(a, la[i], b, lb[j]) {
+            if diff::span_equal(a, la[i], b, lb[j], diff::Compare { fold: false, strip_cr: false }) {
                 cur[j + 1] = prev[j] + 1;
             } else if prev[j + 1] >= cur[j] {
                 cur[j + 1] = prev[j + 1];
@@ -59,7 +59,7 @@ fn check_ops(a: const u8[:], b: const u8[:], ops: const diff::Op[:]) -> i64 {
         if o.tag == diff::OP_EQUAL {
             assert(o.a_hi - o.a_lo == o.b_hi - o.b_lo && o.a_hi > o.a_lo);
             for k in o.a_hi - o.a_lo {
-                assert(diff::span_equal(a, la[o.a_lo + k], b, lb[o.b_lo + k]));
+                assert(diff::span_equal(a, la[o.a_lo + k], b, lb[o.b_lo + k], diff::Compare { fold: false, strip_cr: false }));
             }
             equal = equal + (o.a_hi - o.a_lo);
         } else if o.tag == diff::OP_DELETE {
@@ -498,6 +498,258 @@ fn test_matcher_bounds() {
     assert(diff::matcher_opcodes("a\n", "b\n", o4, ops3) == diff::ERR_BAD_OPTION);
 }
 
+// clear_changes empties the list of changes.
+fn clear_changes(changes: diff::Change[>..]&) {
+    changes.resize(0, diff::Change { at: 0, len: 0, count: 0, text: 0, added: false, removed: false });
+}
+
+// check_change tells whether a change holds the given values. The text
+// of a change says which text it comes from.
+fn check_change(c: diff::Change, at: i64, len: i64, count: i64, text: i64,
+                added: bool, removed: bool) -> bool {
+    return c.at == at && c.len == len && c.count == count && c.text == text &&
+           c.added == added && c.removed == removed;
+}
+
+fn test_token_chars() {
+    // The changes of the character search.
+    var changes: diff::Change[>..] = [];
+    let o = diff::default_token_options();
+    assert(diff::diff_chars("hello world"[..], "hello there"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 6);
+    assert(check_change(changes[0], 0, 6, 6, 1, false, false));
+    assert(check_change(changes[1], 6, 2, 2, 0, false, true));
+    assert(check_change(changes[2], 6, 3, 3, 1, true, false));
+    assert(check_change(changes[3], 9, 1, 1, 1, false, false));
+    assert(check_change(changes[4], 9, 2, 2, 0, false, true));
+    assert(check_change(changes[5], 10, 1, 1, 1, true, false));
+    // The same text gives one change that stays.
+    clear_changes(changes);
+    assert(diff::diff_chars("abc"[..], "abc"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 1);
+    assert(check_change(changes[0], 0, 3, 3, 1, false, false));
+    // Two texts with no character in common.
+    clear_changes(changes);
+    assert(diff::diff_chars("xy"[..], "ab"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 2);
+    assert(check_change(changes[0], 0, 2, 2, 0, false, true));
+    assert(check_change(changes[1], 0, 2, 2, 1, true, false));
+    // An empty text gives no change.
+    clear_changes(changes);
+    assert(diff::diff_chars(""[..], "abc"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 1);
+    assert(check_change(changes[0], 0, 3, 3, 1, true, false));
+}
+
+fn test_token_trimmed() {
+    // The changes of the trimmed line search. It cuts the white space at
+    // the ends of the lines.
+    var changes: diff::Change[>..] = [];
+    let o = diff::default_token_options();
+    assert(diff::diff_lines_trimmed("  a \n b  \n"[..], "  a \n b  \n"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 1);
+    assert(check_change(changes[0], 0, 10, 2, 1, false, false));
+    // The white space at the ends of a line does not matter.
+    clear_changes(changes);
+    assert(diff::diff_lines_trimmed("one\n"[..], "two\nthree\n"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 2);
+    assert(check_change(changes[0], 0, 4, 1, 0, false, true));
+    assert(check_change(changes[1], 0, 10, 2, 1, true, false));
+    // The lines differ only in their white space.
+    clear_changes(changes);
+    assert(diff::diff_lines_trimmed("  a \n"[..], "a\n"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 1);
+    assert(check_change(changes[0], 0, 2, 1, 1, false, false));
+}
+
+fn test_token_sentences() {
+    // The changes of the sentence search.
+    var changes: diff::Change[>..] = [];
+    let o = diff::default_token_options();
+    assert(diff::diff_sentences("One. Two! Three? Four."[..], "One. Two! Three? Five."[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 3);
+    assert(check_change(changes[0], 0, 17, 6, 1, false, false));
+    assert(check_change(changes[1], 17, 5, 1, 0, false, true));
+    assert(check_change(changes[2], 17, 5, 1, 1, true, false));
+    // A text of one sentence gives one change.
+    clear_changes(changes);
+    assert(diff::diff_sentences("Hello world"[..], "Hello there"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 2);
+    assert(check_change(changes[0], 0, 11, 1, 0, false, true));
+    assert(check_change(changes[1], 0, 11, 1, 1, true, false));
+}
+
+fn test_token_arrays() {
+    // The changes of the array search. The tokens stand in the texts.
+    var changes: diff::Change[>..] = [];
+    let o = diff::default_token_options();
+    var ta: diff::Span[>..] = [];
+    var tb: diff::Span[>..] = [];
+    ta.push(diff::Span { at: 0, len: 1 });
+    ta.push(diff::Span { at: 1, len: 1 });
+    tb.push(diff::Span { at: 0, len: 1 });
+    tb.push(diff::Span { at: 1, len: 1 });
+    assert(diff::diff_arrays("ab"[..], "xy"[..], ta[..], tb[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 2);
+    assert(check_change(changes[0], 0, 2, 2, 0, false, true));
+    assert(check_change(changes[1], 0, 2, 2, 1, true, false));
+    // One token on each side.
+    clear_changes(changes);
+    ta.resize(0, diff::Span { at: 0, len: 0 });
+    tb.resize(0, diff::Span { at: 0, len: 0 });
+    ta.push(diff::Span { at: 0, len: 1 });
+    tb.push(diff::Span { at: 0, len: 1 });
+    assert(diff::diff_arrays("a"[..], "b"[..], ta[..], tb[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 2);
+    assert(check_change(changes[0], 0, 1, 1, 0, false, true));
+    assert(check_change(changes[1], 0, 1, 1, 1, true, false));
+    // The same token on each side gives one change that stays.
+    clear_changes(changes);
+    assert(diff::diff_arrays("a"[..], "a"[..], ta[..], tb[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 1);
+    assert(check_change(changes[0], 0, 1, 1, 1, false, false));
+}
+
+fn test_token_switches() {
+    var changes: diff::Change[>..] = [];
+    // The case switch. The fold covers the Latin letters of ASCII.
+    var oc = diff::default_token_options();
+    oc.ignore_case = true;
+    assert(diff::diff_chars("Hello"[..], "hello"[..], oc, changes) == diff::ERR_OK);
+    assert(changes.len == 1);
+    assert(check_change(changes[0], 0, 5, 5, 1, false, false));
+    clear_changes(changes);
+    let o = diff::default_token_options();
+    assert(diff::diff_chars("Hello"[..], "hello"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 3);
+    assert(check_change(changes[0], 0, 1, 1, 0, false, true));
+    assert(check_change(changes[1], 0, 1, 1, 1, true, false));
+    assert(check_change(changes[2], 1, 4, 4, 1, false, false));
+    // The white space switch. It cuts the white space at the ends of a
+    // token.
+    clear_changes(changes);
+    var ow = diff::default_token_options();
+    ow.ignore_whitespace = true;
+    assert(diff::diff_chars("a "[..], "a"[..], ow, changes) == diff::ERR_OK);
+    assert(changes.len == 2);
+    assert(check_change(changes[0], 0, 1, 1, 1, false, false));
+    assert(check_change(changes[1], 1, 1, 1, 0, false, true));
+    // The carriage return switch. It drops the carriage return that
+    // stands before a line feed.
+    clear_changes(changes);
+    var ocr = diff::default_token_options();
+    ocr.strip_trailing_cr = true;
+    assert(diff::diff_chars("a\r\n"[..], "a\n"[..], ocr, changes) == diff::ERR_OK);
+    assert(changes.len == 1);
+    assert(check_change(changes[0], 0, 2, 2, 1, false, false));
+    clear_changes(changes);
+    assert(diff::diff_chars("a\r\n"[..], "a\n"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 3);
+    assert(check_change(changes[0], 0, 1, 1, 1, false, false));
+    assert(check_change(changes[1], 1, 1, 1, 0, false, true));
+    assert(check_change(changes[2], 1, 1, 1, 1, false, false));
+    // The line end switch. It gives the line end a token of its own.
+    clear_changes(changes);
+    var onl = diff::default_token_options();
+    onl.newline_is_token = true;
+    assert(diff::diff_lines_trimmed("a\nb"[..], "a\nc"[..], onl, changes) == diff::ERR_OK);
+    assert(changes.len == 3);
+    assert(check_change(changes[0], 0, 2, 2, 1, false, false));
+    assert(check_change(changes[1], 2, 1, 1, 0, false, true));
+    assert(check_change(changes[2], 2, 1, 1, 1, true, false));
+    // The carriage return switch of the line search.
+    clear_changes(changes);
+    var ol = diff::default_options();
+    ol.strip_trailing_cr = true;
+    var ops: diff::Op[>..] = [];
+    assert(diff::diff_lines("a\r\n"[..], "a\n"[..], ol, ops) == diff::ERR_OK);
+    assert(ops.len == 1);
+    assert(ops[0].tag == diff::OP_EQUAL);
+    var ol2 = diff::default_options();
+    var ops2: diff::Op[>..] = [];
+    assert(diff::diff_lines("a\r\n"[..], "a\n"[..], ol2, ops2) == diff::ERR_OK);
+    assert(ops2.len == 1);
+    assert(ops2[0].tag == diff::OP_REPLACE);
+}
+
+fn test_token_broken() {
+    // A text with a broken code point keeps the bytes of the broken point
+    // in one character.
+    var changes: diff::Change[>..] = [];
+    let o = diff::default_token_options();
+    assert(diff::diff_chars("a\x80b"[..], "a\x80c"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 3);
+    assert(check_change(changes[0], 0, 2, 2, 1, false, false));
+    assert(check_change(changes[1], 2, 1, 1, 0, false, true));
+    assert(check_change(changes[2], 2, 1, 1, 1, true, false));
+}
+
+fn test_token_bounds() {
+    var changes: diff::Change[>..] = [];
+    // A rule out of range is a fault.
+    let o = diff::default_token_options();
+    var ob = diff::default_token_options();
+    ob.max_edits = 0;
+    assert(diff::diff_chars("a"[..], "b"[..], ob, changes) == diff::ERR_BAD_OPTION);
+    assert(changes.len == 0);
+    var ob2 = diff::default_token_options();
+    ob2.algorithm = 9;
+    assert(diff::diff_chars("a"[..], "b"[..], ob2, changes) == diff::ERR_BAD_OPTION);
+    var ob3 = diff::default_token_options();
+    ob3.max_work = 500000001;
+    assert(diff::diff_chars("a"[..], "b"[..], ob3, changes) == diff::ERR_BAD_OPTION);
+    // An input over the limit is a fault.
+    var ob4 = diff::default_token_options();
+    ob4.max_input = 1;
+    assert(diff::diff_chars("ab"[..], "b"[..], ob4, changes) == diff::ERR_TOO_LARGE);
+    assert(changes.len == 0);
+    // The search spends from the budget of the work.
+    var ob5 = diff::default_token_options();
+    ob5.algorithm = diff::ALG_RO;
+    ob5.max_work = 1;
+    assert(diff::diff_chars("abc"[..], "abd"[..], ob5, changes) == diff::ERR_TOO_MUCH_WORK);
+    assert(changes.len == 0);
+    // More tokens than the rule allows is a fault.
+    var ob6 = diff::default_token_options();
+    ob6.max_tokens = 1;
+    assert(diff::diff_chars("ab"[..], "ab"[..], ob6, changes) == diff::ERR_TOO_LARGE);
+    assert(changes.len == 0);
+    var ob7 = diff::default_token_options();
+    ob7.max_tokens = 8000001;
+    assert(diff::diff_chars("ab"[..], "ab"[..], ob7, changes) == diff::ERR_BAD_OPTION);
+    // A span outside its text is a fault.
+    var bad: diff::Span[>..] = [];
+    bad.push(diff::Span { at: 0, len: 100 });
+    assert(diff::diff_arrays("ab"[..], "cd"[..], bad[..], bad[..], o, changes) == diff::ERR_BAD_OPTION);
+    assert(changes.len == 0);
+    var bad2: diff::Span[>..] = [];
+    bad2.push(diff::Span { at: -1, len: 1 });
+    assert(diff::diff_arrays("ab"[..], "cd"[..], bad2[..], bad2[..], o, changes) == diff::ERR_BAD_OPTION);
+    assert(changes.len == 0);
+    // The line search counts its lines too.
+    var ol = diff::default_options();
+    ol.max_tokens = 1;
+    var ops: diff::Op[>..] = [];
+    assert(diff::diff_lines("a\nb\n"[..], "a\nc\n"[..], ol, ops) == diff::ERR_TOO_LARGE);
+    assert(ops.len == 0);
+    // The Myers search spends from the budget of the work. The diff
+    // stays valid, but it is not minimal.
+    var a: u8[>..] = [];
+    var b: u8[>..] = [];
+    for k in 200 {
+        a.push('a' + (k % 26) as! u8);
+        a.push(10);
+        b.push('a' + ((k + 1) % 26) as! u8);
+        b.push(10);
+    }
+    var ow = diff::default_options();
+    ow.max_work = 100;
+    var ops2: diff::Op[>..] = [];
+    let code, exact = diff::diff_lines(a[..], b[..], ow, ops2);
+    assert(code == diff::ERR_OK);
+    assert(!exact);
+}
+
 fn main() {
     test_basic();
     test_random();
@@ -516,5 +768,12 @@ fn main() {
     test_matcher_popular();
     test_matcher_close();
     test_matcher_bounds();
+    test_token_chars();
+    test_token_trimmed();
+    test_token_sentences();
+    test_token_arrays();
+    test_token_switches();
+    test_token_broken();
+    test_token_bounds();
     print("all diff tests pass\n");
 }

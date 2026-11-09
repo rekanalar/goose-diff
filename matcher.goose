@@ -369,10 +369,12 @@ fn ro_quick(a: const i32[:], b: const i32[:], n_ids: i64) -> i64 {
 // ro_prepare splits two texts into lines, gives an id to every line,
 // and marks the junk lines.
 fn ro_prepare(a: const u8[:], b: const u8[:], o: Options,
-              la: Span[>..]&, lb: Span[>..]&, ida: i32[>..]&, idb: i32[>..]&, junk: u8[>..]&) {
-    lines_of(a, b, la, lb, ida, idb);
+              la: Span[>..]&, lb: Span[>..]&, ida: i32[>..]&, idb: i32[>..]&, junk: u8[>..]&) -> i64 {
+    let code = lines_of(a, b, la, lb, ida, idb, o);
+    if code != ERR_OK { return code; }
     junk.resize(ro_ids(ida[..], idb[..]), 0);
     ro_junk_lines(a, la[..], ida[..], b, lb[..], idb[..], o.junk, junk);
+    return ERR_OK;
 }
 
 // matcher_blocks adds the blocks of equal lines of a against b to
@@ -385,7 +387,8 @@ fn matcher_blocks(a: const u8[:], b: const u8[:], o: Options, blocks: Match[>..]
     var ida: i32[>..] = [];
     var idb: i32[>..] = [];
     var junk: u8[>..] = [];
-    ro_prepare(a, b, o, la, lb, ida, idb, junk);
+    let pcode = ro_prepare(a, b, o, la, lb, ida, idb, junk);
+    if pcode != ERR_OK { return pcode; }
     var work: i64 = 0;
     var found: Match[>..] = [];
     let code = ro_blocks(ida[..], idb[..], junk[..], o.autojunk, o.max_work, work, found);
@@ -397,11 +400,11 @@ fn matcher_blocks(a: const u8[:], b: const u8[:], o: Options, blocks: Match[>..]
 // ro_ops adds the opcodes of the matcher of the two lists of ids to
 // `ops`. It gives a code and a flag. The flag is true when the diff is
 // minimal.
-fn ro_ops(a: const i32[:], b: const i32[:], junk: const u8[:], o: Options,
-          ops: Op[>..]&) -> i64, bool {
+fn ro_ops(a: const i32[:], b: const i32[:], junk: const u8[:], autojunk: bool,
+          max_work: i64, ops: Op[>..]&) -> i64, bool {
     var work: i64 = 0;
     var found: Op[>..] = [];
-    let code = ro_opcodes(a, b, junk, o.autojunk, o.max_work, work, found);
+    let code = ro_opcodes(a, b, junk, autojunk, max_work, work, found);
     if code != ERR_OK { return code, false; }
     var equal: i64 = 0;
     for op in found {
@@ -421,8 +424,9 @@ fn matcher_opcodes(a: const u8[:], b: const u8[:], o: Options, ops: Op[>..]&) ->
     var ida: i32[>..] = [];
     var idb: i32[>..] = [];
     var junk: u8[>..] = [];
-    ro_prepare(a, b, o, la, lb, ida, idb, junk);
-    return ro_ops(ida[..], idb[..], junk[..], o, ops);
+    let pcode = ro_prepare(a, b, o, la, lb, ida, idb, junk);
+    if pcode != ERR_OK { return pcode, false; }
+    return ro_ops(ida[..], idb[..], junk[..], o.autojunk, o.max_work, ops);
 }
 
 // matcher_longest gives the longest block of equal lines in a range of
@@ -439,7 +443,8 @@ fn matcher_longest(a: const u8[:], b: const u8[:], o: Options,
     var ida: i32[>..] = [];
     var idb: i32[>..] = [];
     var junk: u8[>..] = [];
-    ro_prepare(a, b, o, la, lb, ida, idb, junk);
+    let pcode = ro_prepare(a, b, o, la, lb, ida, idb, junk);
+    if pcode != ERR_OK { return pcode, Match { a: 0, b: 0, size: 0 }; }
     if alo < 0 || blo < 0 || ahi > la.len || bhi > lb.len || alo > ahi || blo > bhi {
         return ERR_BAD_OPTION, Match { a: 0, b: 0, size: 0 };
     }
@@ -486,7 +491,8 @@ fn matcher_ratio(a: const u8[:], b: const u8[:], o: Options) -> i64, f64 {
     var ida: i32[>..] = [];
     var idb: i32[>..] = [];
     var junk: u8[>..] = [];
-    ro_prepare(a, b, o, la, lb, ida, idb, junk);
+    let pcode = ro_prepare(a, b, o, la, lb, ida, idb, junk);
+    if pcode != ERR_OK { return pcode, 0.0; }
     var work: i64 = 0;
     var blocks: Match[>..] = [];
     let code = ro_blocks(ida[..], idb[..], junk[..], o.autojunk, o.max_work, work, blocks);
@@ -507,7 +513,8 @@ fn matcher_quick_ratio(a: const u8[:], b: const u8[:], o: Options) -> i64, f64 {
     var lb: Span[>..] = [];
     var ida: i32[>..] = [];
     var idb: i32[>..] = [];
-    lines_of(a, b, la, lb, ida, idb);
+    let code = lines_of(a, b, la, lb, ida, idb, o);
+    if code != ERR_OK { return code, 0.0; }
     let matches = ro_quick(ida[..], idb[..], ro_ids(ida[..], idb[..]));
     let total = la.len + lb.len;
     if total == 0 { return ERR_OK, 1.0; }
