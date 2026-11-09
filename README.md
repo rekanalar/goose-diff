@@ -9,7 +9,7 @@ It finds the blocks of equal lines and the words that match a word best. It comp
 ## Install
 
 ```goose
-import diff from "rekanalar/goose-diff@v0.5.0";
+import diff from "rekanalar/goose-diff@v0.6.0";
 ```
 
 The package uses the standard library only. It has no other dependency.
@@ -20,6 +20,7 @@ The package uses the standard library only. It has no other dependency.
 |---|---|
 | Python `difflib` | `SequenceMatcher` with `find_longest_match`, `get_matching_blocks`, `get_opcodes`, `get_grouped_opcodes`, `ratio`, `quick_ratio`, `real_quick_ratio`, junk and `autojunk`. Also `get_close_matches` |
 | Python `difflib` | The opcodes of the change, the grouping of hunks, the format of a range, the format of a unified diff |
+| Python `difflib` | `context_diff` |
 | Python `difflib` | `ndiff` with the lines of hints, and `restore` |
 | Node `diff` (jsdiff) | `createPatch`, `applyPatch`, the reading of a patch, the reverse apply |
 | Node `diff` (jsdiff) | `diffChars`, `diffTrimmedLines`, `diffSentences`, `diffArrays`, the switches of the options |
@@ -35,6 +36,7 @@ The package uses the standard library only. It has no other dependency.
 - **The patch of several files.** One patch holds many files, each with many hunks. The reader skips the lines before a file header, such as `Index:` and `diff --git`.
 - **The apply of a patch.** The apply checks every context line and every removed line. It finds a hunk that sits at another line than its header says.
 - **The reverse apply.** The patch takes the text back to the form before the change.
+- **The context format.** `context_diff` writes the context diff of `difflib`. The hunks follow the rule `context`.
 - **The delta with hints.** `ndiff` writes the delta of `difflib`. A pair of close lines gets a line of hints that marks the changed characters. `ndiff_restore` takes one of the two texts back out of a delta.
 - **The close words.** The package finds the words that match a word best. It compares the words by their characters.
 - **The token searches.** The package compares the characters, the sentences and the tokens that the caller gives. It also compares the lines without the white space at their ends.
@@ -56,6 +58,7 @@ The package uses the standard library only. It has no other dependency.
 | `matcher_ratio(a, b, o)` | Gives the ratio of the two texts. Gives a code and the ratio |
 | `matcher_quick_ratio(a, b, o)` | Gives the quick ratio of the two texts. Gives a code and the ratio |
 | `matcher_real_quick_ratio(a, b, o)` | Gives the real quick ratio of the two texts. Gives a code and the ratio |
+| `context_diff(out, a, b, a_name, b_name, o)` | Adds the context diff of `a` against `b` to `out`. Gives a code and the minimality flag |
 | `ndiff(a, b, o, out)` | Adds the delta of `a` against `b` to `out`. Lines of the first text begin with `- `, lines of the second with `+ `, shared lines with two blanks, hints with `? `. Gives a code |
 | `ndiff_restore(delta, which, out)` | Adds the lines of the text `which` (1 or 2) of a delta to `out`, without the codes. Gives a code |
 | `close_matches(word, cands, n, cutoff, out)` | Adds the places of the words that match the word best to `out`. Gives a code |
@@ -174,7 +177,7 @@ A call that fails leaves the buffer of the caller as it was.
 
 ```goose
 import std;
-import diff from "rekanalar/goose-diff@v0.5.0";
+import diff from "rekanalar/goose-diff@v0.6.0";
 
 fn main() {
     var out: u8[>..] = [];
@@ -215,6 +218,8 @@ Risks that stay: the package reads a patch and a text from the caller. It does n
 
 ## Limits
 
+- **The context diff holds no time stamp.** `difflib` takes a date for each file. The package writes only the names. Put the date in the name when you need one.
+- **The context diff marks a line without a line end.** `difflib` writes the line as it is. The package adds a line end and the marker line of GNU `diff`.
 - **The hints count code points.** A mark stands under one code point, as in Python. A broken byte counts as one code point. A terminal may show a wide character in two columns, so the marks may not line up.
 - **A last line without a line end gets one.** The delta holds that line with a line end. `ndiff_restore` gives it back with a line end. The Python library keeps the line as it is.
 - **The delta takes no junk function.** The search of the lines follows the rules `autojunk` and `strip_trailing_cr` of the call. The search inside a line treats the blank and the tab as junk, as Python does. Python lets the caller change both rules.

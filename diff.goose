@@ -16,6 +16,7 @@ import unified;
 import patch;
 import matcher;
 import tokens;
+import context;
 import ndiff;
 
 // The codes of the faults.
@@ -137,20 +138,13 @@ fn diff_lines(a: const u8[:], b: const u8[:], o: Options, ops: Op[>..]&) -> i64,
     return ERR_OK, exact;
 }
 
-// unified_diff appends the unified diff of a against b to `out`. The
-// names go in the two header lines. Equal texts give no output. It gives
-// a code and a flag. The flag is true when the diff is minimal. The rule
-// `algorithm` names the search.
-fn unified_diff(out: u8[>..]&, a: const u8[:], b: const u8[:], a_name: const u8[:], b_name: const u8[:],
-                o: Options) -> i64, bool {
-    if !options_ok(o) { return ERR_BAD_OPTION, false; }
-    if a.len > o.max_input || b.len > o.max_input { return ERR_TOO_LARGE, false; }
-    if !name_ok(a_name) || !name_ok(b_name) { return ERR_BAD_NAME, false; }
-    var la: Span[>..] = [];
-    var lb: Span[>..] = [];
+// output_ops splits two texts into lines and finds the opcodes that the
+// writers of the unified and the context output need. It gives a code and
+// the minimality flag.
+fn output_ops(a: const u8[:], b: const u8[:], o: Options, la: Span[>..]&, lb: Span[>..]&,
+              ops: Op[>..]&) -> i64, bool {
     var ida: i32[>..] = [];
     var idb: i32[>..] = [];
-    var ops: Op[>..] = [];
     var exact = false;
     if o.algorithm == ALG_RO {
         var junk: u8[>..] = [];
@@ -164,6 +158,23 @@ fn unified_diff(out: u8[>..]&, a: const u8[:], b: const u8[:], a_name: const u8[
         if code != ERR_OK { return code, false; }
         exact = diff_ids(ida[..], idb[..], o.max_edits, o.max_work, ops);
     }
+    return ERR_OK, exact;
+}
+
+// unified_diff appends the unified diff of a against b to `out`. The
+// names go in the two header lines. Equal texts give no output. It gives
+// a code and a flag. The flag is true when the diff is minimal. The rule
+// `algorithm` names the search.
+fn unified_diff(out: u8[>..]&, a: const u8[:], b: const u8[:], a_name: const u8[:], b_name: const u8[:],
+                o: Options) -> i64, bool {
+    if !options_ok(o) { return ERR_BAD_OPTION, false; }
+    if a.len > o.max_input || b.len > o.max_input { return ERR_TOO_LARGE, false; }
+    if !name_ok(a_name) || !name_ok(b_name) { return ERR_BAD_NAME, false; }
+    var la: Span[>..] = [];
+    var lb: Span[>..] = [];
+    var ops: Op[>..] = [];
+    let code, exact = output_ops(a, b, o, la, lb, ops);
+    if code != ERR_OK { return code, false; }
     write_unified(out, a, la[..], b, lb[..], ops[..], a_name, b_name, o.context);
     return ERR_OK, exact;
 }
