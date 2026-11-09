@@ -16,6 +16,7 @@ import unified;
 import patch;
 import matcher;
 import tokens;
+import ndiff;
 
 // The codes of the faults.
 const ERR_OK: i64 = 0;
