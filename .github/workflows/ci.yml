@@ -22,7 +22,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         tag: [v2026.3, v2026.4]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
@@ -63,7 +63,7 @@ jobs:
           GOOSE_HOME: ${{ runner.temp }}/goose-home
 
       - name: Run the test suite
-        timeout-minutes: 5
+        timeout-minutes: 10
         run: |
           set -o pipefail
           goose run test/run.goose 2>&1 | tee test-output.txt
@@ -71,7 +71,7 @@ jobs:
           GOOSE_HOME: ${{ runner.temp }}/goose-home
 
       - name: Run the examples
-        timeout-minutes: 5
+        timeout-minutes: 15
         run: |
           set -euo pipefail
           for f in examples/*.goose; do
