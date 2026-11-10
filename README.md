@@ -9,7 +9,7 @@ It finds the blocks of equal lines and the words that match a word best. It comp
 ## Install
 
 ```goose
-import diff from "rekanalar/goose-diff@v0.12.0";
+import diff from "rekanalar/goose-diff@v0.13.0";
 ```
 
 The package uses the standard library only. It has no other dependency.
@@ -78,6 +78,8 @@ The package uses the standard library only. It has no other dependency.
 | `ndiff_restore(delta, which, out)` | Adds the lines of the text `which` (1 or 2) of a delta to `out`, without the codes. Gives a code |
 | `close_matches(word, cands, n, cutoff, out)` | Adds the places of the words that match the word best to `out`. Gives a code |
 | `diff_chars(a, b, o, changes)` | Adds the changes of the characters of `a` against `b` to `changes`. Gives a code and the minimality flag |
+| `inline_changes(a, b, o, changes, segs)` | Adds every line of the diff of `a` against `b` to `changes`, with its segments in `segs`. A block of changed lines that share enough words gets its changed words marked. It follows `iter_inline_changes` of `similar` |
+| `inline_missing_newline(a, b, c, segs)` | Tells whether the last segment of an inline change has no line end |
 | `diff_lines_text(a, b, o, changes)` | Adds the changes of the lines of `a` against `b`, as `diffLines` of jsdiff does. The rules `ignore_whitespace`, `ignore_newline_at_eof` and `one_change_per_token` apply |
 | `diff_lines_trimmed(a, b, o, changes)` | Adds the changes of the lines of `a` against `b` to `changes`. It cuts the white space at the ends of the lines |
 | `diff_sentences(a, b, o, changes)` | Adds the changes of the sentences of `a` against `b` to `changes`. Gives a code and the minimality flag |
@@ -211,7 +213,7 @@ A call that fails leaves the buffer of the caller as it was.
 
 ```goose
 import std;
-import diff from "rekanalar/goose-diff@v0.12.0";
+import diff from "rekanalar/goose-diff@v0.13.0";
 
 fn main() {
     var out: u8[>..] = [];
@@ -271,6 +273,10 @@ Risks that stay: the package reads a patch and a text from the caller. It does n
 
 ## Limits
 
+- **Inline words split at white space.** A word is a run of white space or a run of other text. The Rust crate `similar` has a second mode. It uses the word bounds of Unicode (UAX 29) and needs its `unicode` feature. The package does the first mode only.
+- **The inline search uses the Patience search for the words.** The rule `algorithm` names the search of the lines. The words always use `ALG_PATIENCE`, as `similar` does.
+- **`ALG_MYERS` is the classic search.** The Myers search of `similar` splits the problem at the middle snake. Both give a shortest script, but they may pick a different one among equal scripts. `ALG_PATIENCE` follows `similar` exactly, including its compaction pass.
+- **The LCS search differs from `similar` on a shared prefix.** The table of `similar` reads the wrong elements then. Its script holds fewer equal lines than the longest common subsequence. The package builds the table after the prefix, so it keeps the longest one.
 - **The Myers search of the package differs from `similar`.** Both give a minimal diff. They pick other anchors when more than one diff is minimal. The Patience search runs the Myers search of `similar` over its gaps, so it matches the crate on every case.
 - **The LCS search fixes a fault of the crate.** `similar` starts the table at the first line. It should start after the common start. The diff may then miss the longest subsequence. The package builds the table after the common start. It always gives the longest. The outputs differ on about one random case in six.
 - **The flag of the Patience search is strict.** Patience does not promise the smallest diff. The flag is true only when the check of the minimality finds that it is the smallest. The check runs on small texts only.

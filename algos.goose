@@ -237,6 +237,19 @@ recursive fn sim_conquer(a: const i32[:], alo0: i64, ahi0: i64, b: const i32[:],
     if s > 0 { sim_equal(raw, sa, sb, s); }
 }
 
+// sim_run runs the Myers search of similar over two ranges with fresh
+// work arrays. The Rust library makes new arrays for every call, and a
+// reused array would hold old values that change the tie breaks.
+fn sim_run(a: const i32[:], alo: i64, ahi: i64, b: const i32[:], blo: i64, bhi: i64,
+           vf: i64[>..]&, vb: i64[>..]&, max_work: i64, work: i64&, raw: Op[>..]&, capped: bool&) {
+    let off = sim_max_d(ahi - alo, bhi - blo) + 2;
+    vf.resize(0, 0);
+    vb.resize(0, 0);
+    vf.resize(2 * off + 2, 0);
+    vb.resize(2 * off + 2, 0);
+    sim_conquer(a, alo, ahi, b, blo, bhi, vf, vb, off, max_work, work, raw, capped);
+}
+
 // sim_patience adds the opcodes of the Patience search to `ops`. It gives
 // false when the budget ended and a range became one replace.
 fn sim_patience(a: const i32[:], b: const i32[:], max_work: i64, ops: Op[>..]&) -> bool {
@@ -272,18 +285,13 @@ fn sim_patience(a: const i32[:], b: const i32[:], max_work: i64, ops: Op[>..]&) 
     var ib: i32[>..] = [];
     for i in na { if ca[da[i] as i64] == 1 { ua.push(i); ia.push(da[i]); } }
     for j in nb { if cb[db[j] as i64] == 1 { ub.push(j); ib.push(db[j]); } }
-    var big = na;
-    if nb > big { big = nb; }
-    let off = sim_max_d(big, big) + 2;
     var vf: i64[>..] = [];
     var vb: i64[>..] = [];
-    vf.resize(2 * off + 2, 0);
-    vb.resize(2 * off + 2, 0);
     var work: i64 = 0;
     var capped = false;
     // The Myers search over the unique items gives the anchors.
     var anchors: Op[>..] = [];
-    sim_conquer(ia[..], 0, ia.len, ib[..], 0, ib.len, vf, vb, off, max_work, work, anchors, capped);
+    sim_run(ia[..], 0, ia.len, ib[..], 0, ib.len, vf, vb, max_work, work, anchors, capped);
     var raw: Op[>..] = [];
     var cur_a: i64 = 0;
     var cur_b: i64 = 0;
@@ -299,13 +307,13 @@ fn sim_patience(a: const i32[:], b: const i32[:], max_work: i64, ops: Op[>..]&) 
                 cur_b = cur_b + 1;
             }
             if cur_a > a0 { sim_equal(raw, a0, b0, cur_a - a0); }
-            sim_conquer(a, cur_a, pa, b, cur_b, pb, vf, vb, off, max_work, work, raw, capped);
+            sim_run(a, cur_a, pa, b, cur_b, pb, vf, vb, max_work, work, raw, capped);
             cur_a = pa;
             cur_b = pb;
         }
     }
-    sim_conquer(a, cur_a, na, b, cur_b, nb, vf, vb, off, max_work, work, raw, capped);
-    sim_replace(raw[..], ops);
+    sim_run(a, cur_a, na, b, cur_b, nb, vf, vb, max_work, work, raw, capped);
+    sim_finish(raw, a, b, ops);
     return !capped;
 }
 
@@ -380,7 +388,7 @@ fn sim_lcs(a: const i32[:], b: const i32[:], max_work: i64, ops: Op[>..]&) -> i6
     oi = old_len;
     if ni < new_len { sim_insert(raw, p + oi, p + ni, new_len - ni); }
     if s > 0 { sim_equal(raw, p + old_len, p + new_len, s); }
-    sim_replace(raw[..], ops);
+    sim_finish(raw, a, b, ops);
     return ERR_OK;
 }
 

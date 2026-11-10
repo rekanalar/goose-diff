@@ -18,6 +18,8 @@ import matcher;
 import tokens;
 import context;
 import cssdiff;
+import inline;
+import compact;
 import algos;
 import spatch;
 import spatchapply;
