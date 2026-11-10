@@ -9,7 +9,7 @@ It finds the blocks of equal lines and the words that match a word best. It comp
 ## Install
 
 ```goose
-import diff from "rekanalar/goose-diff@v0.15.3";
+import diff from "rekanalar/goose-diff@v1.0.0";
 ```
 
 The package depends on `goose-unicode`. A program declares the dependency in its root file too, because Goose reads the packages from the root file only:
@@ -226,7 +226,7 @@ A call that fails leaves the buffer of the caller as it was.
 
 ```goose
 import std;
-import diff from "rekanalar/goose-diff@v0.15.3";
+import diff from "rekanalar/goose-diff@v1.0.0";
 
 fn main() {
     var out: u8[>..] = [];
