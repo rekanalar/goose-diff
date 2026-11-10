@@ -50,6 +50,13 @@ struct TokenOptions {
     // Every token is a change of its own. A run of equal tokens does not
     // join, and the word search does not move white space.
     one_change_per_token: bool,
+    // Compare the tokens with the full Unicode lower case mapping, as
+    // `toLowerCase` of jsdiff does. It replaces `ignore_case`, which
+    // folds the Latin letters of ASCII only.
+    unicode_case: bool,
+    // Split the words of `diff_words` at the word bounds of Unicode, as
+    // the option `intlSegmenter` of jsdiff does.
+    unicode_words: bool,
 }
 
 // default_token_options gives 2000 edits, 16 MiB of input and no switch.
@@ -57,7 +64,8 @@ fn default_token_options() -> TokenOptions {
     return TokenOptions { max_edits: 2000, max_input: 16777216, algorithm: ALG_MYERS,
                           max_work: 50000000, ignore_case: false, ignore_whitespace: false,
                           strip_trailing_cr: false, newline_is_token: false, max_tokens: 2000000,
-                          ignore_newline_at_eof: false, one_change_per_token: false };
+                          ignore_newline_at_eof: false, one_change_per_token: false,
+                          unicode_case: false, unicode_words: false };
 }
 
 // token_options_ok tells whether the rules are in range.
@@ -298,6 +306,53 @@ fn tok_run_change(changes: Change[>..]&, ta: const Span[:], tb: const Span[:], o
     }
 }
 
+// tok_lower appends the full lower case form of every part to `out`,
+// and the place of each form into `spans`. It gives false when a part is
+// too long for the Unicode package.
+fn tok_lower(text: const u8[:], parts: const Span[:], out: u8[>..]&, spans: Span[>..]&) -> bool {
+    for p in parts {
+        var one: u8[>..] = [];
+        let code, pos = unicode::to_lower_full(one, text[p.at..p.at + p.len]);
+        if code != 0 { return false; }
+        spans.push(Span { at: out.len, len: one.len });
+        for ch in one { out.push(ch); }
+    }
+    return true;
+}
+
+// tok_segments gives the segments of the text at the word bounds of
+// Unicode, or at the cluster bounds when `graphemes` is true. It gives
+// false when the text is too long for the Unicode package.
+fn tok_segments(text: const u8[:], graphemes: bool, o: TokenOptions, out: Span[>..]&) -> bool {
+    var offs: i64[>..] = [];
+    var code: i64 = 0;
+    if graphemes { code = unicode::grapheme_offsets(offs, text); } else { code = unicode::word_offsets(offs, text); }
+    if code != 0 || offs.len > o.max_tokens { return false; }
+    for k in offs.len {
+        var end = text.len;
+        if k + 1 < offs.len { end = offs[k + 1]; }
+        out.push(Span { at: offs[k], len: end - offs[k] });
+    }
+    return true;
+}
+
+// tok_segment_parts gives the parts of the word search from the word
+// bounds of Unicode. The segments of white space that touch merge into
+// one part, as `segment` of jsdiff does.
+fn tok_segment_parts(text: const u8[:], o: TokenOptions, out: Span[>..]&) -> bool {
+    var segs: Span[>..] = [];
+    if !tok_segments(text, false, o, segs) { return false; }
+    for s in segs {
+        if out.len > 0 && tok_code_space(text, out[out.len - 1].at) && tok_code_space(text, s.at) {
+            let last = out[out.len - 1];
+            out[out.len - 1] = Span { at: last.at, len: s.at + s.len - last.at };
+        } else {
+            out.push(s);
+        }
+    }
+    return true;
+}
+
 // tok_changes turns the opcodes of the search into the changes. The
 // parts `sa` and `sb` are the parts that the search compares. The parts
 // `ta` and `tb` are the tokens of the texts.
@@ -306,7 +361,16 @@ fn tok_changes(a: const u8[:], ta: const Span[:], sa: const Span[:],
                o: TokenOptions, longest: bool, changes: Change[>..]&) -> i64, bool {
     var ida: i32[>..] = [];
     var idb: i32[>..] = [];
-    intern(a, sa, b, sb, ida, idb, tok_compare(o));
+    if o.unicode_case {
+        var fa: u8[>..] = [];
+        var fb: u8[>..] = [];
+        var fsa: Span[>..] = [];
+        var fsb: Span[>..] = [];
+        if !tok_lower(a, sa, fa, fsa) || !tok_lower(b, sb, fb, fsb) { return ERR_TOO_LARGE, false; }
+        intern(fa[..], fsa[..], fb[..], fsb[..], ida, idb, Compare { fold: false, strip_cr: o.strip_trailing_cr });
+    } else {
+        intern(a, sa, b, sb, ida, idb, tok_compare(o));
+    }
     var ops: Op[>..] = [];
     var exact = false;
     if o.algorithm == ALG_RO {
@@ -850,7 +914,11 @@ fn diff_words(a: const u8[:], b: const u8[:], o: TokenOptions, changes: Change[>
     let start = changes.len;
     var pa: Span[>..] = [];
     var pb: Span[>..] = [];
-    if !tok_parts(a, o, false, pa) || !tok_parts(b, o, false, pb) { return ERR_TOO_LARGE, false; }
+    if o.unicode_words {
+        if !tok_segment_parts(a, o, pa) || !tok_segment_parts(b, o, pb) { return ERR_TOO_LARGE, false; }
+    } else if !tok_parts(a, o, false, pa) || !tok_parts(b, o, false, pb) {
+        return ERR_TOO_LARGE, false;
+    }
     var ta: Span[>..] = [];
     var tb: Span[>..] = [];
     tok_stitch(a, pa[..], ta);
@@ -949,4 +1017,26 @@ fn diff_arrays(a: const u8[:], b: const u8[:], ta: const Span[:], tb: const Span
         if !tok_span_ok(b, t) { return ERR_BAD_OPTION, false; }
     }
     return tok_run(a, ta, b, tb, o, o.ignore_whitespace, changes);
+}
+
+// diff_unicode_words adds the changes of the Unicode words of a against
+// b to `changes`, as `from_unicode_words` of the Rust crate `similar`
+// does. Every segment is a token, and the white space is a token too.
+fn diff_unicode_words(a: const u8[:], b: const u8[:], o: TokenOptions, changes: Change[>..]&) -> i64, bool {
+    return diff_segments(a, b, false, o, changes);
+}
+
+// diff_graphemes adds the changes of the grapheme clusters of a against
+// b to `changes`, as `from_graphemes` of `similar` does.
+fn diff_graphemes(a: const u8[:], b: const u8[:], o: TokenOptions, changes: Change[>..]&) -> i64, bool {
+    return diff_segments(a, b, true, o, changes);
+}
+
+fn diff_segments(a: const u8[:], b: const u8[:], graphemes: bool, o: TokenOptions, changes: Change[>..]&) -> i64, bool {
+    if !token_options_ok(o) { return ERR_BAD_OPTION, false; }
+    if a.len > o.max_input || b.len > o.max_input { return ERR_TOO_LARGE, false; }
+    var ta: Span[>..] = [];
+    var tb: Span[>..] = [];
+    if !tok_segments(a, graphemes, o, ta) || !tok_segments(b, graphemes, o, tb) { return ERR_TOO_LARGE, false; }
+    return tok_run(a, ta[..], b, tb[..], o, o.ignore_whitespace, changes);
 }

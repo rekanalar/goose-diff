@@ -1,6 +1,7 @@
 // Read a unified patch, and apply it to a text.
 import std;
 import diff from "..";
+import unicode from "rekanalar/goose-unicode@v0.3.0";
 
 fn main() {
     // A patch as GNU diff writes it.

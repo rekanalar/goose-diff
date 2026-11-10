@@ -1,6 +1,7 @@
 // The four searches of a line diff.
 import std;
 import diff from "..";
+import unicode from "rekanalar/goose-unicode@v0.3.0";
 
 fn main() {
     let a = "one\ntwo\nthree\nfour\n";

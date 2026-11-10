@@ -10,6 +10,7 @@
 namespace diff;
 
 import std;
+import unicode from "rekanalar/goose-unicode@v0.3.0";
 import lines;
 import myers;
 import unified;
@@ -73,6 +74,8 @@ struct Options {
     max_tokens: i64,
     // The junk characters of a delta: CHARJUNK_BLANK or CHARJUNK_NONE.
     char_junk: i64,
+    // The inline changes split the words at the word bounds of Unicode.
+    unicode_words: bool,
 }
 
 // default_options gives 3 lines of context, 2000 edits and 16 MiB.
@@ -80,7 +83,8 @@ fn default_options() -> Options {
     return Options { context: 3, max_edits: 2000, max_input: 16777216,
                      algorithm: ALG_MYERS, junk: JUNK_NONE, autojunk: true,
                      max_work: 50000000, strip_trailing_cr: false,
-                     max_tokens: 2000000, char_junk: CHARJUNK_BLANK };
+                     max_tokens: 2000000, char_junk: CHARJUNK_BLANK,
+                     unicode_words: false };
 }
 
 // The most context lines that one call takes. A larger value would wrap

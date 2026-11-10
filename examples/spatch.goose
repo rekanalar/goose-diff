@@ -1,5 +1,6 @@
 // The structured patch: build one, flip it, apply it back.
 import diff from "..";
+import unicode from "rekanalar/goose-unicode@v0.3.0";
 
 fn put_text(out: u8[>..]&, s: const u8[:]) {
     for c in s { out.push(c); }

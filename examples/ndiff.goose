@@ -1,6 +1,7 @@
 // The delta of two texts, and the first text back out of the delta.
 import std;
 import diff from "..";
+import unicode from "rekanalar/goose-unicode@v0.3.0";
 
 fn main() {
     let a = "one\ntwo\nthree\n";

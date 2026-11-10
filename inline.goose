@@ -75,6 +75,21 @@ fn in_words(text: const u8[:], s: Span, line: i64, out: Span[>..]&, lines: i64[>
     }
 }
 
+// in_uwords adds the Unicode words of the line `s` to `out`, and the number
+// of the line to `lines`. It gives false when the line is too long for the
+// Unicode package.
+fn in_uwords(text: const u8[:], s: Span, line: i64, out: Span[>..]&, lines: i64[>..]&) -> bool {
+    var offs: i64[>..] = [];
+    if unicode::word_offsets(offs, text[s.at..s.at + s.len]) != 0 { return false; }
+    for k in offs.len {
+        var end = s.len;
+        if k + 1 < offs.len { end = offs[k + 1]; }
+        out.push(Span { at: s.at + offs[k], len: end - offs[k] });
+        lines.push(line);
+    }
+    return true;
+}
+
 // in_push adds the segments of the slice at..at+len of a line. A slice
 // that changed splits at its line ends, and the line ends are not marked.
 fn in_push(text: const u8[:], at: i64, len: i64, emph: bool, line: i64,
@@ -158,8 +173,13 @@ fn in_block(a: const u8[:], b: const u8[:], op: Op, la: const Span[:], lb: const
     var tla: i64[>..] = [];
     var tb: Span[>..] = [];
     var tlb: i64[>..] = [];
-    for i in n_old { in_words(a, la[op.a_lo + i], i, ta, tla); }
-    for j in n_new { in_words(b, lb[op.b_lo + j], j, tb, tlb); }
+    if o.unicode_words {
+        for i in n_old { if !in_uwords(a, la[op.a_lo + i], i, ta, tla) { return ERR_TOO_LARGE; } }
+        for j in n_new { if !in_uwords(b, lb[op.b_lo + j], j, tb, tlb) { return ERR_TOO_LARGE; } }
+    } else {
+        for i in n_old { in_words(a, la[op.a_lo + i], i, ta, tla); }
+        for j in n_new { in_words(b, lb[op.b_lo + j], j, tb, tlb); }
+    }
     if ta.len + tb.len > o.max_tokens { return ERR_TOO_LARGE; }
     var ida: i32[>..] = [];
     var idb: i32[>..] = [];

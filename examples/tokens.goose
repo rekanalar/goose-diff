@@ -1,6 +1,7 @@
 // The changes of the token searches of two texts.
 import std;
 import diff from "..";
+import unicode from "rekanalar/goose-unicode@v0.3.0";
 
 // show_changes prints the changes of a search. The change holds the
 // place of its text in the text it comes from.

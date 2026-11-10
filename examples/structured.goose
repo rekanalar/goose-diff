@@ -1,6 +1,7 @@
 // The search of two style sheets and the search of two JSON documents.
 import std;
 import diff from "..";
+import unicode from "rekanalar/goose-unicode@v0.3.0";
 
 fn show(changes: const diff::Change[:], a: const u8[:], b: const u8[:]) {
     for c in changes {

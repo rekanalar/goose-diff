@@ -1,6 +1,7 @@
 // The context diff of two texts.
 import std;
 import diff from "..";
+import unicode from "rekanalar/goose-unicode@v0.3.0";
 
 fn main() {
     var out: u8[>..] = [];

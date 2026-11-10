@@ -1,6 +1,7 @@
 // A unified diff of two texts, and the opcodes of the change.
 import std;
 import diff from "..";
+import unicode from "rekanalar/goose-unicode@v0.3.0";
 
 fn main() {
     let a = "one\ntwo\nthree\nfour\nfive\n";

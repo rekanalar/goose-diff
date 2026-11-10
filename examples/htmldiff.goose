@@ -1,6 +1,7 @@
 // A side by side table of two texts, and a full page.
 import std;
 import diff from "..";
+import unicode from "rekanalar/goose-unicode@v0.3.0";
 
 fn main() {
     let a = "one\ntwo three four\n\tfive\n";

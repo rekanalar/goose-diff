@@ -9,10 +9,16 @@ It finds the blocks of equal lines and the words that match a word best. It comp
 ## Install
 
 ```goose
-import diff from "rekanalar/goose-diff@v0.14.0";
+import diff from "rekanalar/goose-diff@v0.15.0";
 ```
 
-The package uses the standard library only. It has no other dependency.
+The package depends on `goose-unicode`. A program declares the dependency in its root file too, because Goose reads the packages from the root file only:
+
+```goose
+import unicode from "rekanalar/goose-unicode@v0.3.0";
+```
+
+The word bounds, the cluster bounds and the case fold of Unicode come from that package.
 
 ## Reference libraries
 
@@ -49,6 +55,7 @@ The package uses the standard library only. It has no other dependency.
 - **The side by side HTML diff.** `html_table` and `html_file` write the table and the page of `HtmlDiff`. The table holds the line numbers and the links to the changes. It marks the changes inside a line. It has a context form and wraps long lines. The bytes follow Python 3.14.
 - **The close words.** The package finds the words that match a word best. It compares the words by their characters.
 - **The token searches.** The package compares the characters, the sentences and the tokens that the caller gives. It also compares the lines without the white space at their ends.
+- **The Unicode word, cluster and case rules.** `diff_unicode_words`, `diff_graphemes`, `unicode_words` and `unicode_case` follow `similar` and the Node library.
 - **The word searches.** The package compares the words of two texts. One search ignores the white space between the words. The other keeps it.
 - **The switches of a token search.** Four switches change the search. They cover the case, the white space, the carriage return and the line end.
 - **A bounded search.** The search for a hunk and the search of the matcher spend from a budget. A patch that needs too much work is a fault, not a hang.
@@ -85,6 +92,8 @@ The package uses the standard library only. It has no other dependency.
 | `diff_sentences(a, b, o, changes)` | Adds the changes of the sentences of `a` against `b` to `changes`. Gives a code and the minimality flag |
 | `diff_arrays(a, b, ta, tb, o, changes)` | Adds the changes of the two lists of tokens to `changes`. The tokens stand in the two texts |
 | `diff_words(a, b, o, changes)` | Adds the changes of the words of `a` against `b` to `changes`. The white space between the words does not matter |
+| `diff_unicode_words(a, b, o, changes)` | Adds the changes of the Unicode words of `a` against `b`. Every word and every run of white space is a token, as `from_unicode_words` of `similar` gives them |
+| `diff_graphemes(a, b, o, changes)` | Adds the changes of the grapheme clusters of `a` against `b`, as `from_graphemes` of `similar` gives them |
 | `diff_words_with_space(a, b, o, changes)` | Adds the changes of the words of `a` against `b` to `changes`. The white space between the words matters |
 | `patch_parse(text, files, hunks, body)` | Reads a unified patch. Gives a code |
 | `patch_apply(src, text, files, hunks, body, file, o, out)` | Adds the text of `src` after one file of a patch is applied. Gives a code |
@@ -150,6 +159,7 @@ A part that stays comes from the second text, as the Node library gives it.
 | `max_work` | The most compares that the matcher spends. It goes from 0 to 500000000 | 50000000 |
 | `strip_trailing_cr` | The carriage return that stands before a line feed does not matter | false |
 | `max_tokens` | The most lines of the two texts. It goes from 1 to 8000000 | 2000000 |
+| `unicode_words` | `inline_changes` splits the words at the word bounds of Unicode, as `similar` does with its `unicode` feature | false |
 
 A program that builds the rules with a literal must name every field. A program that takes the rules from `default_options()` needs no change.
 
@@ -180,6 +190,8 @@ library does.
 | `ignore_newline_at_eof` | A line end at the end of a line does not matter. Acts in `diff_lines_text` when `ignore_whitespace` and `newline_is_token` are off | false |
 | `one_change_per_token` | Every token is a change of its own. The word search does not move white space | false |
 | `max_tokens` | The most tokens of the two texts. It goes from 1 to 8000000 | 2000000 |
+| `unicode_words` | `diff_words` splits the words at the word bounds of Unicode, as the `intlSegmenter` option of the Node library does | false |
+| `unicode_case` | The tokens compare with the full lower case form of Unicode, as `ignoreCase` of the Node library does | false |
 
 The rule `newline_is_token` changes the line searches only. The rule `ignore_whitespace` has no effect on the trimmed line search, which always cuts the white space.
 
@@ -214,7 +226,7 @@ A call that fails leaves the buffer of the caller as it was.
 
 ```goose
 import std;
-import diff from "rekanalar/goose-diff@v0.14.0";
+import diff from "rekanalar/goose-diff@v0.15.0";
 
 fn main() {
     var out: u8[>..] = [];
@@ -269,12 +281,15 @@ fn main() {
 - **The rules of a diff stay in range**. The rule `context` goes to 1073741824. The rule `max_edits` goes to 3000. The rule `max_work` goes to 500000000. A rule beyond its cap is a fault. So no rule can wrap the arithmetic of the output or of the search.
 - **The lines of a text never join into one byte.** Every line keeps its line end. A line of the text can hold any byte, so a diff never splits a line of a text.
 - **A failed call changes nothing**. A fault in the read of a patch rolls back the file list, the hunk list and the body list. A fault in an apply rolls back the output buffer. A fault in the matcher rolls back the list of the blocks and the list of the opcodes.
+- **The Unicode splits bound their input.** The package `goose-unicode` takes at most 1 MiB. A longer text gives `ERR_TOO_LARGE`. The token count stays under `max_tokens`. A hostile text cannot grow the work past the budget.
 
 Risks that stay: the package reads a patch and a text from the caller. It does not read a file and it does not run a command. Your program bounds the size of a patch from a network. The caller chooses the size of the buffer that holds the patch.
 
 ## Limits
 
-- **Inline words split at white space.** A word is a run of white space or a run of other text. The Rust crate `similar` has a second mode. It uses the word bounds of Unicode (UAX 29) and needs its `unicode` feature. The package does the first mode only.
+- **The Unicode splits use the default rules.** They follow UAX 29 with no dictionary and no locale. A text in Chinese, Japanese, Thai, Lao, Khmer or Burmese splits where the default rules split it. The Node `Intl.Segmenter` may split these texts at the word of a dictionary. The Rust crate `unicode-segmentation` splits as the package does. The package has no list of abbreviations.
+- **A text longer than 1 MiB fails in the Unicode splits.** The package `goose-unicode` takes at most 1 MiB. A longer input gives `ERR_TOO_LARGE`.
+- **`unicode_case` lowers each token alone.** A one-letter capital sigma stays `σ`, as in the Node library.
 - **The inline search uses the Patience search for the words.** The rule `algorithm` names the search of the lines. The words always use `ALG_PATIENCE`, as `similar` does.
 - **`ALG_MYERS` is the classic search.** It may pick another shortest script than `similar`. Use `ALG_MYERS_SPLIT` for the script of `similar`, with its compaction pass.
 - **The LCS search differs from `similar` on a shared prefix.** The table of `similar` reads the wrong elements then. Its script holds fewer equal lines than the longest common subsequence. The package builds the table after the prefix, so it keeps the longest one.
@@ -306,7 +321,7 @@ The package gives the white space to one word and then moves it. The changes hol
 - **The word search cuts the white space at the ends.** The Node library compares the words without that white space. The package does the same.
 - **The changes hold bytes.** The Node library holds the text of a change. The package holds the place of the text and the count of its bytes. A code point outside the Basic Multilingual Plane holds more bytes than characters.
 - **The array search takes the places of the tokens.** The Node library takes the tokens themselves. The package takes the place of every token in its text.
-- **The case fold covers the Latin letters of ASCII.** The Node library folds the case of the whole Unicode. The package folds the letters from A to Z. A letter outside ASCII keeps its case.
+- **`ignore_case` folds ASCII letters only.** It folds A to Z. A letter outside ASCII keeps its case. Set `unicode_case` for the full lower case form of Unicode, as `ignoreCase` of the Node library gives it.
 - **The carriage return stays in the text.** The Node library removes the carriage return from the text before the search. The package keeps it in the text of a change and ignores it in the comparison. The unified output keeps it too. GNU `diff --strip-trailing-cr` removes it from the output.
 - **The switches reach further than in the Node library.** The switch `ignore_whitespace` and the switch `strip_trailing_cr` change every token search. The Node library applies them to the line searches only.
 - **The token searches pick another anchor than the Node library.** Both diffs hold the same count of changes. The anchor decides which part stays. The reference libraries disagree on the anchor. The word searches differ from the Node library on four of every hundred cases. The search of the package matches the Python library `difflib` on every case.

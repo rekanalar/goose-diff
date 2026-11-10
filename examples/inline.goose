@@ -1,6 +1,7 @@
 // The inline changes of two texts: every line, with the changed words marked.
 import std;
 import diff from "..";
+import unicode from "rekanalar/goose-unicode@v0.3.0";
 
 fn main() {
     let a = "keep this line\nthe quick brown fox\n";

@@ -1,5 +1,6 @@
 import std;
 import diff from "..";
+import unicode from "rekanalar/goose-unicode@v0.3.0";
 
 var seed: u64 = 12345;
 
@@ -1726,6 +1727,48 @@ fn test_line_ends() {
 
 // test_jsdiff_options pins the rules ignore_newline_at_eof and
 // one_change_per_token against the results of jsdiff.
+// unicode_run diffs two texts with the Unicode rules and gives the changes
+// as lines of tag, a space and the text.
+fn unicode_run(a: const u8[:], b: const u8[:], mode: i64, out: u8[>..]&) {
+    var o = diff::default_token_options();
+    var ch: diff::Change[>..] = [];
+    var code: i64 = 0;
+    var ex: bool = false;
+    if mode == 1 { o.one_change_per_token = true; o.algorithm = diff::ALG_MYERS_SPLIT; code, ex = diff::diff_unicode_words(a, b, o, ch); }
+    else if mode == 2 { o.one_change_per_token = true; o.algorithm = diff::ALG_MYERS_SPLIT; code, ex = diff::diff_graphemes(a, b, o, ch); }
+    else if mode == 3 { o.unicode_words = true; code, ex = diff::diff_words(a, b, o, ch); }
+    else { o.unicode_case = true; code, ex = diff::diff_words(a, b, o, ch); }
+    assert(code == diff::ERR_OK);
+    for c in ch {
+        var src: const u8[:] = b;
+        if c.removed { src = a; }
+        if c.added { out.push('+'); } else if c.removed { out.push('-'); } else { out.push('='); }
+        out.push(' ');
+        for k in c.len { out.push(src[c.at + k]); }
+        out.push('|');
+    }
+}
+
+fn unicode_is(a: const u8[:], b: const u8[:], mode: i64, want: const u8[:]) -> bool {
+    var out: u8[>..] = [];
+    unicode_run(a, b, mode, out);
+    if out.len != want.len { return false; }
+    for k in want.len { if out[k] != want[k] { return false; } }
+    return true;
+}
+
+// The expected lines come from the Rust crate similar (from_unicode_words
+// and from_graphemes) and from jsdiff (intlSegmenter and ignoreCase).
+fn test_unicode() {
+    assert(unicode_is("Hello wörld äöü"[..], "Hello WÖRLD äöü!"[..], 1, "= Hello|=  |- wörld|+ WÖRLD|=  |= äöü|+ !|"[..]));
+    assert(unicode_is("don't"[..], "don’t"[..], 1, "- don't|+ don’t|"[..]));
+    assert(unicode_is("ab"[..], "ac"[..], 2, "= a|- b|+ c|"[..]));
+    assert(unicode_is("Straße ΣΑΣ İstanbul"[..], "STRASSE σας istanbul"[..], 3, "- Straße ΣΑΣ İstanbul|+ STRASSE σας istanbul|"[..]));
+    // The final sigma: each letter folds alone, as toLowerCase does.
+    assert(unicode_is("ΣΑΣ x"[..], "σας x"[..], 4, "= σα|- Σ|+ ς|=  x|"[..]));
+    assert(unicode_is("Straße"[..], "STRASSE"[..], 4, "- Straße|+ STRASSE|"[..]));
+}
+
 fn test_jsdiff_options() {
     var changes: diff::Change[>..] = [];
     var o = diff::default_token_options();
@@ -1775,8 +1818,13 @@ fn test_jsdiff_options() {
 // the tag, the two indexes, and the segments. A segment of a changed word
 // starts with "!", any other segment starts with ".".
 fn il_render(a: const u8[:], b: const u8[:], alg: i64) -> u8[>..] {
+    return il_render_u(a, b, alg, false);
+}
+
+fn il_render_u(a: const u8[:], b: const u8[:], alg: i64, uni: bool) -> u8[>..] {
     var o = diff::default_options();
     o.algorithm = alg;
+    o.unicode_words = uni;
     var ch: diff::InlineChange[>..] = [];
     var sg: diff::InlineSeg[>..] = [];
     assert(diff::inline_changes(a, b, o, ch, sg) == diff::ERR_OK);
@@ -1823,6 +1871,10 @@ fn test_inline() {
     for c in [97, 194, 160, 98, 32, 240, 159, 10] { bad2.push(c as u8); }
     let r4 = il_render(bad[..], bad2[..], diff::ALG_PATIENCE);
     assert(r4.len > 0);
+    // The word bounds of Unicode split the apostrophe words and the cases
+    // of `similar` with its unicode feature.
+    let r5 = il_render_u("don't wörld 日本 x\nsame\n", "don’t WÖRLD 日本 y\nsame\n", diff::ALG_PATIENCE, true);
+    assert(r5[..] == "- 0 - !don't|. |!wörld|. 日本 |!x|.\\n\n+ - 0 !don’t|. |!WÖRLD|. 日本 |!y|.\\n\n= 1 1 .same\\n\n");
 }
 
 // test_compaction pins the opcodes of the patience search after the
@@ -1987,6 +2039,7 @@ fn main() {
     test_dated();
     test_line_ends();
     test_jsdiff_options();
+    test_unicode();
     test_inline();
     test_compaction();
     test_apply_all();
