@@ -354,3 +354,32 @@ fn patch_apply_into(src: const u8[:], text: const u8[:], fp: FilePatch, hunks: c
     }
     return ERR_OK;
 }
+
+// patch_apply_all applies every file of a patch to its own source, as
+// `applyPatches` of jsdiff does. The caller loads the sources, one per
+// file of the patch, in the order of the files. The `srcs` buffer holds
+// them, and `spans` holds the place of each. The result of file `i` goes
+// to `out`, and its place goes to `outs`. The call stops at the first
+// fault, leaves both buffers as they were, and gives the code and the
+// index of the file that failed (-1 when the fault is not about a file).
+fn patch_apply_all(srcs: const u8[:], spans: const Span[:], text: const u8[:], files: const FilePatch[:],
+                   hunks: const Hunk[:], body: const Span[:], o: ApplyOptions,
+                   out: u8[>..]&, outs: Span[>..]&) -> i64, i64 {
+    if spans.len != files.len { return ERR_BAD_OPTION, -1; }
+    for s in spans {
+        if s.at < 0 || s.len < 0 || s.at > srcs.len || s.len > srcs.len - s.at { return ERR_BAD_OPTION, -1; }
+    }
+    let base = out.len;
+    let nbase = outs.len;
+    for i in files.len {
+        let at = out.len;
+        let code = patch_apply(srcs[spans[i].at..spans[i].at + spans[i].len], text, files, hunks, body, i, o, out);
+        if code != ERR_OK {
+            out.resize(base, 0);
+            outs.resize(nbase, Span { at: 0, len: 0 });
+            return code, i;
+        }
+        outs.push(Span { at: at, len: out.len - at });
+    }
+    return ERR_OK, -1;
+}

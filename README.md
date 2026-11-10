@@ -9,7 +9,7 @@ It finds the blocks of equal lines and the words that match a word best. It comp
 ## Install
 
 ```goose
-import diff from "rekanalar/goose-diff@v0.13.0";
+import diff from "rekanalar/goose-diff@v0.14.0";
 ```
 
 The package uses the standard library only. It has no other dependency.
@@ -41,7 +41,7 @@ The package uses the standard library only. It has no other dependency.
 - **The XML and DMP forms.** `changes_xml` and `changes_dmp` give a change list in the XML and the `diff-match-patch` forms. The XML form escapes `&`, `<`, `>` and the quote, as jsdiff does.
 - **The apply of a patch.** The apply checks every context line and every removed line. It finds a hunk that sits at another line than its header says.
 - **The reverse apply.** The patch takes the text back to the form before the change.
-- **Four searches.** The rule `algorithm` takes `ALG_MYERS`, `ALG_RO` (the matcher of `difflib`), `ALG_PATIENCE` and `ALG_LCS`. The Patience search matches the Rust crate `similar` step by step.
+- **Five searches.** The rule `algorithm` takes five values. `ALG_MYERS` is the classic search and `ALG_RO` is the matcher of `difflib`. `ALG_PATIENCE`, `ALG_LCS` and `ALG_MYERS_SPLIT` follow `similar`. The Patience search and `ALG_MYERS_SPLIT` match the Rust crate `similar` step by step.
 - **The CSS and JSON searches.** `diff_css` compares the tokens of a style sheet. `diff_json` writes both JSON texts in one canonical form with sorted keys, then compares the lines. A comma at the end of a line does not count.
 - **The context format.** `context_diff` writes the context diff of `difflib`. The hunks follow the rule `context`.
 - **The dates and the line terminator.** `unified_diff_dated` and `context_diff_dated` take a date for each file. They take the line terminator of the header lines. Python names these `fromfiledate`, `tofiledate` and `lineterm`.
@@ -94,6 +94,7 @@ The package uses the standard library only. It has no other dependency.
 | `create_patch(name, a, b, a_header, b_header, o, sp, hunks, names, marks, body, lspans, out)` | Builds the patch of one file and writes it. Gives a code |
 | `patch_parse_structured(text, file, sp, hunks, names, marks, body, lspans)` | Reads one file of a patch into the structured model. Gives a code |
 | `patch_reverse(sp, hunks, names, marks, fsp, fhunks, fnames, fmarks)` | Fills the flipped patch. The flipped patch shares the body lines with the patch. Gives a code |
+| `patch_apply_all(srcs, spans, text, files, hunks, body, o, out, outs)` | Applies every file of a patch to its own source, as `applyPatches` of jsdiff does. The caller loads the sources. It stops at the first fault and gives the code and the index of the file |
 | `patch_apply_fuzz(src, sp, hunks, marks, body, lspans, o, out)` | Applies a structured patch. The rule `fuzz` gives the most context lines that may mismatch. Gives a code |
 | `changes_xml(changes, a, b, out)` | Writes the change list in the XML form. Removed text goes into `<del>`, added text into `<ins>`. The text is escaped. Gives a code |
 | `changes_dmp(changes, a, b, out)` | Writes the change list as the `diff-match-patch` array of pairs of a tag and a text. Gives a code |
@@ -142,7 +143,7 @@ A part that stays comes from the second text, as the Node library gives it.
 | `context` | The lines of context around a change in the unified output | 3 |
 | `max_edits` | The most edits that the Myers search takes. It goes from 1 to 3000 | 2000 |
 | `max_input` | The most bytes of one input | 16777216 |
-| `algorithm` | The search of the diff: `ALG_MYERS` or `ALG_RO` | `ALG_MYERS` |
+| `algorithm` | The search of the diff, from `ALG_MYERS` to `ALG_MYERS_SPLIT` | `ALG_MYERS` |
 | `junk` | The junk rule of the matcher: `JUNK_NONE`, `JUNK_BLANK` or `JUNK_COMMENT` | `JUNK_NONE` |
 | `char_junk` | The junk characters of `ndiff` and of the HTML table: `CHARJUNK_BLANK` (the blank and the tab) or `CHARJUNK_NONE` | `CHARJUNK_BLANK` |
 | `autojunk` | The popular rule of the matcher. It drops a line that appears often in the second text | true |
@@ -170,7 +171,7 @@ library does.
 |---|---|---|
 | `max_edits` | The most edits that the Myers search takes. It goes from 1 to 3000 | 2000 |
 | `max_input` | The most bytes of one input | 16777216 |
-| `algorithm` | The search of the diff: `ALG_MYERS` or `ALG_RO` | `ALG_MYERS` |
+| `algorithm` | The search of the diff, from `ALG_MYERS` to `ALG_MYERS_SPLIT` | `ALG_MYERS` |
 | `max_work` | The most compares that the search spends. It goes from 0 to 500000000 | 50000000 |
 | `ignore_case` | The case of the tokens does not matter | false |
 | `ignore_whitespace` | The white space at the ends of a token does not matter | false |
@@ -213,7 +214,7 @@ A call that fails leaves the buffer of the caller as it was.
 
 ```goose
 import std;
-import diff from "rekanalar/goose-diff@v0.13.0";
+import diff from "rekanalar/goose-diff@v0.14.0";
 
 fn main() {
     var out: u8[>..] = [];
@@ -275,7 +276,7 @@ Risks that stay: the package reads a patch and a text from the caller. It does n
 
 - **Inline words split at white space.** A word is a run of white space or a run of other text. The Rust crate `similar` has a second mode. It uses the word bounds of Unicode (UAX 29) and needs its `unicode` feature. The package does the first mode only.
 - **The inline search uses the Patience search for the words.** The rule `algorithm` names the search of the lines. The words always use `ALG_PATIENCE`, as `similar` does.
-- **`ALG_MYERS` is the classic search.** The Myers search of `similar` splits the problem at the middle snake. Both give a shortest script, but they may pick a different one among equal scripts. `ALG_PATIENCE` follows `similar` exactly, including its compaction pass.
+- **`ALG_MYERS` is the classic search.** It may pick another shortest script than `similar`. Use `ALG_MYERS_SPLIT` for the script of `similar`, with its compaction pass.
 - **The LCS search differs from `similar` on a shared prefix.** The table of `similar` reads the wrong elements then. Its script holds fewer equal lines than the longest common subsequence. The package builds the table after the prefix, so it keeps the longest one.
 - **The Myers search of the package differs from `similar`.** Both give a minimal diff. They pick other anchors when more than one diff is minimal. The Patience search runs the Myers search of `similar` over its gaps, so it matches the crate on every case.
 - **The LCS search fixes a fault of the crate.** `similar` starts the table at the first line. It should start after the common start. The diff may then miss the longest subsequence. The package builds the table after the common start. It always gives the longest. The outputs differ on about one random case in six.
@@ -323,7 +324,7 @@ The package gives the white space to one word and then moves it. The changes hol
 - **The structured patch holds one file.** The caller loops over the files of a patch with several files. jsdiff walks them through callbacks. The reader `patch_parse_structured` takes one file by index.
 - **A header holds one line.** jsdiff lets a header hold line ends. The builder refuses a name or a header with a line end, as the patch reader of the package does.
 - **The writer always takes the tab of a header.** jsdiff leaves the tab out when the caller passes no header. The package writes one tab for every header, even an empty one.
-- **The apply of a patch works on one file at a time**. A patch of many files needs one call per file. The call takes the index of the file.
+- **The apply of a patch reads no file**. `patch_apply_all` takes the sources from the caller, one per file. `patch_apply` takes the index of one file.
 - **The read of a patch takes no limit of bytes**. The count of files and the count of hunks are bounded. The size of the patch is not. Your program bounds the size of a patch from a network.
 - **The apply takes the same text that the read took**. The call holds the patch bytes apart from the parsed places. Give it the text that `patch_parse` read. Another text holds places that do not fit.
 - **The apply does not create or remove a file.** A patch that adds or removes a file gives `ERR_NO_MATCH`. The package does not touch a file of the file system.

@@ -1223,7 +1223,7 @@ fn test_patience_lcs_text() {
     var changes: diff::Change[>..] = [];
     assert(diff::diff_chars("abcd"[..], "abd"[..], to, changes) == diff::ERR_OK);
     assert(changes.len == 3);
-    to.algorithm = 4;
+    to.algorithm = 5;
     assert(diff::diff_chars("abcd"[..], "abd"[..], to, changes) == diff::ERR_BAD_OPTION);
     o.algorithm = -1;
     assert(diff::unified_diff(out, "a"[..], "b"[..], "x", "y", o) == diff::ERR_BAD_OPTION);
@@ -1842,6 +1842,60 @@ fn test_compaction() {
     assert(ops[3].tag == diff::OP_EQUAL && ops[3].a_lo == 3 && ops[3].b_lo == 7);
 }
 
+// test_apply_all pins the apply of a patch of two files to two sources.
+fn test_apply_all() {
+    let patch = "--- a\n+++ a\n@@ -1,2 +1,2 @@\n x\n-y\n+Y\n--- b\n+++ b\n@@ -1,2 +1,2 @@\n p\n-q\n+Q\n";
+    var files: diff::FilePatch[>..] = [];
+    var hunks: diff::Hunk[>..] = [];
+    var body: diff::Span[>..] = [];
+    assert(diff::patch_parse(patch, files, hunks, body) == diff::ERR_OK);
+    var srcs: u8[>..] = [];
+    put_text(srcs, "x\ny\np\nq\n");
+    var spans: diff::Span[>..] = [];
+    spans.push(diff::Span { at: 0, len: 4 });
+    spans.push(diff::Span { at: 4, len: 4 });
+    let o = diff::default_apply_options();
+    var out: u8[>..] = [];
+    var outs: diff::Span[>..] = [];
+    let code, bad = diff::patch_apply_all(srcs[..], spans[..], patch, files[..], hunks[..], body[..], o, out, outs);
+    assert(code == diff::ERR_OK && bad == -1);
+    assert(out[..] == "x\nY\np\nQ\n");
+    assert(outs.len == 2 && outs[1].at == 4 && outs[1].len == 4);
+    // The second source does not fit: the call gives its index and changes nothing.
+    var srcs2: u8[>..] = [];
+    put_text(srcs2, "x\ny\np\nz\n");
+    var out2: u8[>..] = [];
+    var outs2: diff::Span[>..] = [];
+    let code2, bad2 = diff::patch_apply_all(srcs2[..], spans[..], patch, files[..], hunks[..], body[..], o, out2, outs2);
+    assert(code2 == diff::ERR_NO_MATCH && bad2 == 1);
+    assert(out2.len == 0 && outs2.len == 0);
+    // A count of sources that does not match the files is a fault.
+    var one: diff::Span[>..] = [];
+    one.push(diff::Span { at: 0, len: 4 });
+    let code3, bad3 = diff::patch_apply_all(srcs[..], one[..], patch, files[..], hunks[..], body[..], o, out2, outs2);
+    assert(code3 == diff::ERR_BAD_OPTION && bad3 == -1);
+}
+
+// test_split_myers pins the Myers search of similar on the case where it differs from the classic search.
+fn test_split_myers() {
+    var a: i32[>..] = [];
+    for v in [0, 1, 0, 1, 2, 1] { a.push(v as i32); }
+    var b: i32[>..] = [];
+    for v in [6, 1, 0, 1, 7, 1, 8, 1, 6, 1] { b.push(v as i32); }
+    var ops: diff::Op[>..] = [];
+    let code, ex = diff::diff_ids_alg(a[..], b[..], diff::ALG_MYERS_SPLIT, 2000, 50000000, ops);
+    assert(code == diff::ERR_OK && ex);
+    assert(ops[0].tag == diff::OP_INSERT && ops[0].b_hi == 2);
+    assert(ops[1].tag == diff::OP_EQUAL && ops[1].a_lo == 0 && ops[1].a_hi == 2 && ops[1].b_lo == 2 && ops[1].b_hi == 4);
+    assert(ops[2].tag == diff::OP_REPLACE && ops[2].a_lo == 2 && ops[2].a_hi == 3 && ops[2].b_lo == 4 && ops[2].b_hi == 7);
+    var o = diff::default_options();
+    o.algorithm = diff::ALG_MYERS_SPLIT;
+    var lops: diff::Op[>..] = [];
+    let c2, e2 = diff::diff_lines("a\nb\nc\n", "a\nX\nc\n", o, lops);
+    assert(c2 == diff::ERR_OK);
+    assert(lops.len == 3 && lops[1].tag == diff::OP_REPLACE);
+}
+
 fn test_dated() {
     var dro = diff::default_options();
     dro.algorithm = diff::ALG_RO;
@@ -1935,6 +1989,8 @@ fn main() {
     test_jsdiff_options();
     test_inline();
     test_compaction();
+    test_apply_all();
+    test_split_myers();
     test_ndiff_restore();
     test_ndiff_bounds();
     print("all diff tests pass\n");

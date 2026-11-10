@@ -30,7 +30,7 @@ struct TokenOptions {
     max_edits: i64,
     // The most bytes of one input.
     max_input: i64,
-    // The search of the diff: ALG_MYERS, ALG_RO, ALG_PATIENCE or ALG_LCS.
+    // The search of the diff: ALG_MYERS, ALG_RO, ALG_PATIENCE, ALG_LCS or ALG_MYERS_SPLIT.
     algorithm: i64,
     // The most compares that the search spends.
     max_work: i64,

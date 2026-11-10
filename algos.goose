@@ -11,6 +11,8 @@ import dictionary;
 // The values of the rule `algorithm` that this file adds.
 const ALG_PATIENCE: i64 = 2;
 const ALG_LCS: i64 = 3;
+// The Myers search of the Rust crate `similar`: it splits at the middle snake.
+const ALG_MYERS_SPLIT: i64 = 4;
 
 // The most cells of the table of the LCS search: 64 MB of i32.
 const MAX_LCS_TABLE: i64 = 16777216;
@@ -408,6 +410,16 @@ fn diff_ids_alg(a: const i32[:], b: const i32[:], algorithm: i64, max_edits: i64
         // Patience does not promise the smallest diff, so the flag holds
         // only when the check of the minimality says so.
         return ERR_OK, complete && ro_is_minimal(a, b, equal);
+    }
+    if algorithm == ALG_MYERS_SPLIT {
+        var raw: Op[>..] = [];
+        var vf: i64[>..] = [];
+        var vb: i64[>..] = [];
+        var work: i64 = 0;
+        var capped = false;
+        sim_run(a, 0, a.len, b, 0, b.len, vf, vb, max_work, work, raw, capped);
+        sim_finish(raw, a, b, ops);
+        return ERR_OK, !capped;
     }
     if algorithm == ALG_LCS {
         var found: Op[>..] = [];

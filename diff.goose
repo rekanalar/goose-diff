@@ -57,7 +57,7 @@ struct Options {
     max_edits: i64,
     // The most bytes of one input.
     max_input: i64,
-    // The search of the diff: ALG_MYERS, ALG_RO, ALG_PATIENCE or ALG_LCS.
+    // The search of the diff: ALG_MYERS, ALG_RO, ALG_PATIENCE, ALG_LCS or ALG_MYERS_SPLIT.
     algorithm: i64,
     // The junk rule of the matcher and of the line search of a delta:
     // JUNK_NONE, JUNK_BLANK or JUNK_COMMENT.
@@ -106,7 +106,7 @@ const MAX_TOKENS: i64 = 8000000;
 fn search_ok(max_edits: i64, max_input: i64, algorithm: i64, max_work: i64,
              max_tokens: i64) -> bool {
     return max_edits >= 1 && max_edits <= MAX_EDITS && max_input >= 0 &&
-           (algorithm >= ALG_MYERS && algorithm <= ALG_LCS) &&
+           (algorithm >= ALG_MYERS && algorithm <= ALG_MYERS_SPLIT) &&
            max_work >= 0 && max_work <= MAX_WORK &&
            max_tokens >= 1 && max_tokens <= MAX_TOKENS;
 }
