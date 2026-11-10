@@ -9,7 +9,7 @@ It finds the blocks of equal lines and the words that match a word best. It comp
 ## Install
 
 ```goose
-import diff from "rekanalar/goose-diff@v0.15.1";
+import diff from "rekanalar/goose-diff@v0.15.2";
 ```
 
 The package depends on `goose-unicode`. A program declares the dependency in its root file too, because Goose reads the packages from the root file only:
@@ -226,7 +226,7 @@ A call that fails leaves the buffer of the caller as it was.
 
 ```goose
 import std;
-import diff from "rekanalar/goose-diff@v0.15.1";
+import diff from "rekanalar/goose-diff@v0.15.2";
 
 fn main() {
     var out: u8[>..] = [];
@@ -281,14 +281,14 @@ fn main() {
 - **The rules of a diff stay in range**. The rule `context` goes to 1073741824. The rule `max_edits` goes to 3000. The rule `max_work` goes to 500000000. A rule beyond its cap is a fault. So no rule can wrap the arithmetic of the output or of the search.
 - **The lines of a text never join into one byte.** Every line keeps its line end. A line of the text can hold any byte, so a diff never splits a line of a text.
 - **A failed call changes nothing**. A fault in the read of a patch rolls back the file list, the hunk list and the body list. A fault in an apply rolls back the output buffer. A fault in the matcher rolls back the list of the blocks and the list of the opcodes.
-- **The Unicode splits bound their input.** The package `goose-unicode` takes at most 1 MiB per call. A line past that gives `ERR_TOO_LARGE`. The token count stays under `max_tokens`. A hostile text cannot grow the work past the budget.
+- **The Unicode splits bound their input.** The package `goose-unicode` takes at most 1 MiB per call. A word past that gives `ERR_TOO_LARGE`. The token count stays under `max_tokens`. A hostile text cannot grow the work past the budget.
 
 Risks that stay: the package reads a patch and a text from the caller. It does not read a file and it does not run a command. Your program bounds the size of a patch from a network. The caller chooses the size of the buffer that holds the patch.
 
 ## Limits
 
 - **The Unicode splits use the default rules.** They follow UAX 29 with no dictionary and no locale. A text in Chinese, Japanese, Thai, Lao, Khmer or Burmese splits where the default rules split it. The Node `Intl.Segmenter` may split these texts at the word of a dictionary. The Rust crate `unicode-segmentation` splits as the package does. The package has no list of abbreviations.
-- **A line past 1 MiB fails in the Unicode splits.** The package `goose-unicode` takes at most 1 MiB per call. The package splits a text after line feeds, where every rule gives a break. A single line past the cap gives `ERR_TOO_LARGE`.
+- **One word past 1 MiB fails in the Unicode splits.** The package `goose-unicode` takes at most 1 MiB per call. The package cuts a text where every rule gives a break. A single word past the cap that holds a byte outside ASCII gives `ERR_TOO_LARGE`.
 - **`unicode_case` lowers each token alone.** A one-letter capital sigma stays `σ`, as in the Node library.
 - **The inline search uses the Patience search for the words.** The rule `algorithm` names the search of the lines. The words always use `ALG_PATIENCE`, as `similar` does.
 - **`ALG_MYERS` is the classic search.** It may pick another shortest script than `similar`. Use `ALG_MYERS_SPLIT` for the script of `similar`, with its compaction pass.

@@ -320,31 +320,78 @@ fn tok_lower(text: const u8[:], parts: const Span[:], out: u8[>..]&, spans: Span
     return true;
 }
 
+// The most bytes that one call of the Unicode package takes.
+const UNI_CAP: i64 = 1048576;
+
+fn tok_ascii_alnum(c: u8) -> bool {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+}
+
+// tok_cut gives the end of the next chunk of the text that starts at
+// `from`, and a flag. The flag is true when the cut stands inside a run
+// of ASCII letters and digits, so the words on both sides join. The cut
+// stands after a line feed, or after a space that a letter or a digit
+// follows. Every rule of UAX 29 gives a break there. It gives -1 when no
+// cut exists.
+fn tok_cut(text: const u8[:], from: i64) -> i64, bool {
+    var to = from + UNI_CAP;
+    if to >= text.len { return text.len, false; }
+    var p = to;
+    while p > from {
+        if text[p - 1] == 10 { return p, false; }
+        p = p - 1;
+    }
+    p = to;
+    while p > from {
+        if text[p - 1] == 32 && tok_ascii_alnum(text[p]) { return p, false; }
+        p = p - 1;
+    }
+    p = to;
+    while p > from {
+        if tok_ascii_alnum(text[p - 1]) && tok_ascii_alnum(text[p]) { return p, true; }
+        p = p - 1;
+    }
+    return -1, false;
+}
+
 // tok_segments gives the segments of the text at the word bounds of
 // Unicode, or at the cluster bounds when `graphemes` is true. The Unicode
-// package takes at most 1 MiB, so the text splits after a line feed
-// into chunks below that size. A break always stands after a line feed.
-// It gives false when one line is longer than the cap.
+// package takes at most 1 MiB, so the text splits into chunks at places
+// where the rules give a break. It gives false when no such place exists
+// in a chunk, or when the Unicode package refuses.
 fn tok_segments(text: const u8[:], graphemes: bool, o: TokenOptions, out: Span[>..]&) -> bool {
-    let cap: i64 = 1048576;
     var from: i64 = 0;
+    var join = false;
     while from < text.len {
-        var to = from + cap;
-        if to >= text.len {
-            to = text.len;
-        } else {
-            while to > from && text[to - 1] != 10 { to = to - 1; }
-            if to == from { return false; }
-        }
+        var to, inside = tok_cut(text, from);
         var offs: i64[>..] = [];
         var code: i64 = 0;
-        if graphemes { code = unicode::grapheme_offsets(offs, text[from..to]); } else { code = unicode::word_offsets(offs, text[from..to]); }
-        if code != 0 || out.len + offs.len > o.max_tokens { return false; }
+        var window = to;
+        if to < 0 {
+            window = from + UNI_CAP;
+            while window > from && window < text.len && (text[window] & 192) == 128 { window = window - 1; }
+        }
+        if graphemes { code = unicode::grapheme_offsets(offs, text[from..window]); } else { code = unicode::word_offsets(offs, text[from..window]); }
+        if code != 0 { return false; }
+        if to < 0 {
+            // No safe place by the bytes. The segments of the window are
+            // true bounds, except the last two, which may need more text.
+            if offs.len < 3 { return false; }
+            to = from + offs[offs.len - 2];
+            offs.resize(offs.len - 2, 0);
+            inside = false;
+        }
+        if out.len + offs.len > o.max_tokens { return false; }
         for k in offs.len {
             var end = to - from;
             if k + 1 < offs.len { end = offs[k + 1]; }
-            out.push(Span { at: from + offs[k], len: end - offs[k] });
+            if k == 0 && join && out.len > 0 {
+                out[out.len - 1] = Span { at: out[out.len - 1].at, len: from + end - out[out.len - 1].at };
+            } else {
+                out.push(Span { at: from + offs[k], len: end - offs[k] });
+            }
         }
+        join = inside && !graphemes;
         from = to;
     }
     return true;

@@ -126,33 +126,34 @@ fn intern(a: const u8[:], la: const Span[:], b: const u8[:], lb: const Span[:],
     var rep_text: u8[>..] = [];
     var rep_span: Span[>..] = [];
     let seed = time_ns() as u64;
-    for pass in 2 {
-        var text = a;
-        var n = la.len;
-        if pass == 1 { text = b; n = lb.len; }
-        for i in n {
-            var s = Span { at: 0, len: 0 };
-            if pass == 0 { s = la[i]; } else { s = lb[i]; }
-            var slot = (hash_span(text, s, seed, cmp) & (mask as u64)) as i64;
-            var id: i32 = -1;
-            while id < 0 {
-                let t = table[slot];
-                if t < 0 {
-                    id = rep_span.len as i32;
-                    table[slot] = id;
-                    rep_text.push(pass as u8);
-                    rep_span.push(s);
-                } else {
-                    var other = a;
-                    if rep_text[t] == 1 { other = b; }
-                    if span_equal(text, s, other, rep_span[t], cmp) {
-                        id = t;
-                    } else {
-                        slot = (slot + 1) & mask;
-                    }
-                }
+    intern_pass(a, la, a, b, 0, table, rep_text, rep_span, mask, seed, cmp, ida);
+    intern_pass(b, lb, a, b, 1, table, rep_text, rep_span, mask, seed, cmp, idb);
+}
+
+// intern_pass gives the ids to the lines of one text. The pass is 0 for
+// the first text and 1 for the second. A branch picks the text of the
+// stored line, so the texts can sit in other storage.
+fn intern_pass(text: const u8[:], spans: const Span[:], a: const u8[:], b: const u8[:], pass: i64,
+               table: i32[>..]&, rep_text: u8[>..]&, rep_span: Span[>..]&,
+               mask: i64, seed: u64, cmp: Compare, ids: i32[>..]&) {
+    for i in spans.len {
+        let s = spans[i];
+        var slot = (hash_span(text, s, seed, cmp) & (mask as u64)) as i64;
+        var id: i32 = -1;
+        while id < 0 {
+            let t = table[slot];
+            if t < 0 {
+                id = rep_span.len as i32;
+                table[slot] = id;
+                rep_text.push(pass as u8);
+                rep_span.push(s);
+            } else {
+                var same = false;
+                if rep_text[t] == 1 { same = span_equal(text, s, b, rep_span[t], cmp); }
+                else { same = span_equal(text, s, a, rep_span[t], cmp); }
+                if same { id = t; } else { slot = (slot + 1) & mask; }
             }
-            if pass == 0 { ida.push(id); } else { idb.push(id); }
         }
+        ids.push(id);
     }
 }

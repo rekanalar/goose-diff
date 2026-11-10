@@ -1779,12 +1779,33 @@ fn test_unicode() {
     let code, ex = diff::diff_unicode_words(big[..], big2[..], o, ch);
     assert(code == diff::ERR_OK);
     assert(ch.len == 2);
-    // One line past the cap is a fault.
+    // A long line without spaces still splits: a run of ASCII letters is
+    // one word, and a line of Han characters cuts between the segments.
     var line: u8[>..] = [];
     for k in 1100000 { line.push('a'); }
+    var one: u8[>..] = [];
+    one.push('z');
     var ch2: diff::Change[>..] = [];
-    let code2, ex2 = diff::diff_graphemes(line[..], big2[..], o, ch2);
-    assert(code2 == diff::ERR_TOO_LARGE);
+    let code2, ex2 = diff::diff_unicode_words(line[..], one[..], o, ch2);
+    assert(code2 == diff::ERR_OK);
+    assert(ch2.len == 2);
+    var han: u8[>..] = [];
+    for k in 400000 { han.push(0xE6); han.push(0x97); han.push(0xA5); }
+    var ch3: diff::Change[>..] = [];
+    let code3, ex3 = diff::diff_unicode_words(han[..], one[..], o, ch3);
+    assert(code3 == diff::ERR_OK);
+    // A text in a buffer against a literal works in every search.
+    var mixed: u8[>..] = [];
+    for c in "one two\nthree\n" { mixed.push(c); }
+    var ch5: diff::Change[>..] = [];
+    assert(diff::diff_lines_text(mixed[..], "one 2\nthree\n"[..], o, ch5) == diff::ERR_OK);
+    assert(diff::diff_unicode_words(mixed[..], "one 2\nthree\n"[..], o, ch5) == diff::ERR_OK);
+    // One word of more than 1 MiB that is no ASCII is a fault.
+    var wide: u8[>..] = [];
+    for k in 600000 { wide.push(0xC3); wide.push(0xA9); }
+    var ch4: diff::Change[>..] = [];
+    let code4, ex4 = diff::diff_unicode_words(wide[..], one[..], o, ch4);
+    assert(code4 == diff::ERR_TOO_LARGE);
 }
 
 fn test_jsdiff_options() {
