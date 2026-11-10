@@ -1680,6 +1680,97 @@ fn test_html() {
 }
 
 // test_dated pins the dates, the terminator and the junk rules of Python 3.14.
+// le_apply builds the patch of a against b, then applies it to src with
+// the rule of the line ends set to `auto`. It gives the code and the text.
+fn le_apply(a: const u8[:], b: const u8[:], src: const u8[:], auto: bool) -> i64, u8[>..] {
+    let o = diff::default_options();
+    var sp: diff::SPatch = diff::SPatch { old_name: diff::Span { at: 0, len: 0 }, new_name: diff::Span { at: 0, len: 0 }, old_header: diff::Span { at: 0, len: 0 }, new_header: diff::Span { at: 0, len: 0 }, first_hunk: 0, hunks: 0 };
+    var hu: diff::Hunk[>..] = [];
+    var nn: u8[>..] = [];
+    var mk: u8[>..] = [];
+    var bd: u8[>..] = [];
+    var ls: diff::Span[>..] = [];
+    assert(diff::structured_patch("f", "f", a, b, "", "", o, sp, hu, nn, mk, bd, ls) == diff::ERR_OK);
+    var ao = diff::default_apply_options();
+    ao.auto_line_ends = auto;
+    var out: u8[>..] = [];
+    let c = diff::patch_apply_fuzz(src, sp, hu[..], mk[..], bd[..], ls[..], ao, out);
+    return c, out;
+}
+
+// test_line_ends pins the conversion of the line ends of a patch, as the
+// rule autoConvertLineEndings of jsdiff does it.
+fn test_line_ends() {
+    // A patch with LF applies to a text with CRLF, and the result keeps CRLF.
+    let c1, r1 = le_apply("a\nb\nc\n", "a\nB\nc\n", "a\r\nb\r\nc\r\n", true);
+    assert(c1 == diff::ERR_OK);
+    assert(r1[..] == "a\r\nB\r\nc\r\n");
+    let c2, r2 = le_apply("a\nb\nc\n", "a\nB\nc\n", "a\r\nb\r\nc\r\n", false);
+    assert(c2 == diff::ERR_NO_MATCH);
+    assert(r2.len == 0);
+    // A patch with CRLF applies to a text with LF, and the result keeps LF.
+    let c3, r3 = le_apply("a\r\nb\r\nc\r\n", "a\r\nB\r\nc\r\n", "a\nb\nc\n", true);
+    assert(c3 == diff::ERR_OK);
+    assert(r3[..] == "a\nB\nc\n");
+    let c4, r4 = le_apply("a\r\nb\r\nc\r\n", "a\r\nB\r\nc\r\n", "a\nb\nc\n", false);
+    assert(c4 == diff::ERR_NO_MATCH);
+    // The last line has no line end: no carriage return is added.
+    let c5, r5 = le_apply("a\nb\nc", "a\nb\nC", "a\r\nb\r\nc", true);
+    assert(c5 == diff::ERR_OK);
+    assert(r5[..] == "a\r\nb\r\nC");
+    // A text with mixed line ends gets no conversion.
+    let c6, r6 = le_apply("a\nb\nc\n", "a\nB\nc\n", "a\r\nb\nc\n", true);
+    assert(c6 == diff::ERR_NO_MATCH);
+    assert(r6.len == 0);
+}
+
+// test_jsdiff_options pins the rules ignore_newline_at_eof and
+// one_change_per_token against the results of jsdiff.
+fn test_jsdiff_options() {
+    var changes: diff::Change[>..] = [];
+    var o = diff::default_token_options();
+    // The line end at the end of the text does not matter.
+    o.ignore_newline_at_eof = true;
+    assert(diff::diff_lines_text("a\nb"[..], "a\nb\n"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 1);
+    assert(check_change(changes[0], 0, 4, 2, 1, false, false));
+    clear_changes(changes);
+    o.ignore_newline_at_eof = false;
+    assert(diff::diff_lines_text("a\nb"[..], "a\nb\n"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 3);
+    assert(check_change(changes[0], 0, 2, 1, 1, false, false));
+    assert(check_change(changes[1], 2, 1, 1, 0, false, true));
+    assert(check_change(changes[2], 2, 2, 1, 1, true, false));
+    // Each line is a change of its own.
+    clear_changes(changes);
+    o.one_change_per_token = true;
+    assert(diff::diff_lines_text("a\nb\nc\nd\n"[..], "a\nX\nY\nd\n"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 6);
+    assert(check_change(changes[0], 0, 2, 1, 1, false, false));
+    assert(check_change(changes[1], 2, 2, 1, 0, false, true));
+    assert(check_change(changes[2], 4, 2, 1, 0, false, true));
+    assert(check_change(changes[3], 2, 2, 1, 1, true, false));
+    assert(check_change(changes[4], 4, 2, 1, 1, true, false));
+    assert(check_change(changes[5], 6, 2, 1, 1, false, false));
+    // Each character is a change of its own.
+    clear_changes(changes);
+    assert(diff::diff_chars("abcd"[..], "abXd"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 5);
+    assert(check_change(changes[0], 0, 1, 1, 1, false, false));
+    assert(check_change(changes[1], 1, 1, 1, 1, false, false));
+    assert(check_change(changes[2], 2, 1, 1, 0, false, true));
+    assert(check_change(changes[3], 2, 1, 1, 1, true, false));
+    assert(check_change(changes[4], 3, 1, 1, 1, false, false));
+    // The word search keeps the white space of the tokens as they are.
+    clear_changes(changes);
+    assert(diff::diff_words("foo bar  baz"[..], "foo qux baz"[..], o, changes) == diff::ERR_OK);
+    assert(changes.len == 4);
+    assert(check_change(changes[0], 0, 4, 1, 1, false, false));
+    assert(check_change(changes[1], 3, 6, 1, 0, false, true));
+    assert(check_change(changes[2], 3, 5, 1, 1, true, false));
+    assert(check_change(changes[3], 7, 4, 1, 1, false, false));
+}
+
 fn test_dated() {
     var dro = diff::default_options();
     dro.algorithm = diff::ALG_RO;
@@ -1769,6 +1860,8 @@ fn main() {
     test_spatch_eof();
     test_html();
     test_dated();
+    test_line_ends();
+    test_jsdiff_options();
     test_ndiff_restore();
     test_ndiff_bounds();
     print("all diff tests pass\n");

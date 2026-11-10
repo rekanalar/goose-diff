@@ -44,13 +44,20 @@ struct TokenOptions {
     newline_is_token: bool,
     // The most tokens of the two texts. Past it, the call is a fault.
     max_tokens: i64,
+    // The line end at the end of a line does not matter. It acts in
+    // `diff_lines_text` when no other white space rule is set.
+    ignore_newline_at_eof: bool,
+    // Every token is a change of its own. A run of equal tokens does not
+    // join, and the word search does not move white space.
+    one_change_per_token: bool,
 }
 
 // default_token_options gives 2000 edits, 16 MiB of input and no switch.
 fn default_token_options() -> TokenOptions {
     return TokenOptions { max_edits: 2000, max_input: 16777216, algorithm: ALG_MYERS,
                           max_work: 50000000, ignore_case: false, ignore_whitespace: false,
-                          strip_trailing_cr: false, newline_is_token: false, max_tokens: 2000000 };
+                          strip_trailing_cr: false, newline_is_token: false, max_tokens: 2000000,
+                          ignore_newline_at_eof: false, one_change_per_token: false };
 }
 
 // token_options_ok tells whether the rules are in range.
@@ -245,8 +252,15 @@ fn tok_same(text: const u8[:], toks: const Span[:], trim: bool, o: TokenOptions,
 // tok_change adds one change to the list. The change holds the place of
 // its text in the text it comes from.
 fn tok_change(changes: Change[>..]&, toks: const Span[:], from: i64, to: i64,
-              text: i64, added: bool, removed: bool) {
+              text: i64, added: bool, removed: bool, one: bool) {
     if from >= to { return; }
+    if one {
+        for k in from..to {
+            changes.push(Change { at: toks[k].at, len: toks[k].len, count: 1, text: text,
+                                  added: added, removed: removed });
+        }
+        return;
+    }
     let first = toks[from];
     let last = toks[to - 1];
     changes.push(Change { at: first.at, len: last.at + last.len - first.at,
@@ -256,31 +270,31 @@ fn tok_change(changes: Change[>..]&, toks: const Span[:], from: i64, to: i64,
 // tok_longest adds the changes of one run of equal tokens. Each pair of
 // equal tokens keeps the longer token of the two. A run that takes its
 // tokens from one text is one change.
-fn tok_longest(changes: Change[>..]&, ta: const Span[:], tb: const Span[:], op: Op) {
+fn tok_longest(changes: Change[>..]&, ta: const Span[:], tb: const Span[:], op: Op, one: bool) {
     var run_from: i64 = op.b_lo;
     var run_text: i64 = -1;
     for j in op.b_lo..op.b_hi {
         let i = op.a_lo + (j - op.b_lo);
         var side: i64 = 1;
         if ta[i].len > tb[j].len { side = 0; }
-        if run_text >= 0 && side != run_text {
-            tok_run_change(changes, ta, tb, op, run_from, j, run_text);
+        if run_text >= 0 && (side != run_text || one) {
+            tok_run_change(changes, ta, tb, op, run_from, j, run_text, one);
             run_from = j;
         }
         run_text = side;
     }
-    if run_text >= 0 { tok_run_change(changes, ta, tb, op, run_from, op.b_hi, run_text); }
+    if run_text >= 0 { tok_run_change(changes, ta, tb, op, run_from, op.b_hi, run_text, one); }
 }
 
 // tok_run_change adds one change for the equal tokens from..to of the
 // second text. The text 0 takes the tokens of the first text.
 fn tok_run_change(changes: Change[>..]&, ta: const Span[:], tb: const Span[:], op: Op,
-                  from: i64, to: i64, text: i64) {
+                  from: i64, to: i64, text: i64, one: bool) {
     if text == 1 {
-        tok_change(changes, tb, from, to, 1, false, false);
+        tok_change(changes, tb, from, to, 1, false, false, one);
     } else {
         let shift = op.a_lo - op.b_lo;
-        tok_change(changes, ta, from + shift, to + shift, 0, false, false);
+        tok_change(changes, ta, from + shift, to + shift, 0, false, false, one);
     }
 }
 
@@ -309,17 +323,17 @@ fn tok_changes(a: const u8[:], ta: const Span[:], sa: const Span[:],
     for op in ops {
         if op.tag == OP_EQUAL {
             if longest {
-                tok_longest(changes, ta, tb, op);
+                tok_longest(changes, ta, tb, op, o.one_change_per_token);
             } else {
-                tok_change(changes, tb, op.b_lo, op.b_hi, 1, false, false);
+                tok_change(changes, tb, op.b_lo, op.b_hi, 1, false, false, o.one_change_per_token);
             }
         } else if op.tag == OP_DELETE {
-            tok_change(changes, ta, op.a_lo, op.a_hi, 0, false, true);
+            tok_change(changes, ta, op.a_lo, op.a_hi, 0, false, true, o.one_change_per_token);
         } else if op.tag == OP_INSERT {
-            tok_change(changes, tb, op.b_lo, op.b_hi, 1, true, false);
+            tok_change(changes, tb, op.b_lo, op.b_hi, 1, true, false, o.one_change_per_token);
         } else {
-            tok_change(changes, ta, op.a_lo, op.a_hi, 0, false, true);
-            tok_change(changes, tb, op.b_lo, op.b_hi, 1, true, false);
+            tok_change(changes, ta, op.a_lo, op.a_hi, 0, false, true, o.one_change_per_token);
+            tok_change(changes, tb, op.b_lo, op.b_hi, 1, true, false, o.one_change_per_token);
         }
     }
     return ERR_OK, exact;
@@ -364,6 +378,32 @@ fn diff_lines_trimmed(a: const u8[:], b: const u8[:], o: TokenOptions, changes: 
     var tb: Span[>..] = [];
     if !tok_lines(a, o, ta) || !tok_lines(b, o, tb) { return ERR_TOO_LARGE, false; }
     return tok_run(a, ta[..], b, tb[..], o, true, changes);
+}
+
+// diff_lines_text adds the changes of a against b to `changes`, as the
+// function diffLines of jsdiff does. The rules `ignore_whitespace`,
+// `ignore_newline_at_eof`, `ignore_case`, `strip_trailing_cr`,
+// `newline_is_token` and `one_change_per_token` apply. It gives a code
+// and a flag.
+fn diff_lines_text(a: const u8[:], b: const u8[:], o: TokenOptions, changes: Change[>..]&) -> i64, bool {
+    if !token_options_ok(o) { return ERR_BAD_OPTION, false; }
+    if a.len > o.max_input || b.len > o.max_input { return ERR_TOO_LARGE, false; }
+    var ta: Span[>..] = [];
+    var tb: Span[>..] = [];
+    if !tok_lines(a, o, ta) || !tok_lines(b, o, tb) { return ERR_TOO_LARGE, false; }
+    if o.ignore_whitespace || !o.ignore_newline_at_eof || o.newline_is_token {
+        return tok_run(a, ta[..], b, tb[..], o, o.ignore_whitespace, changes);
+    }
+    if ta.len + tb.len > o.max_tokens { return ERR_TOO_LARGE, false; }
+    var sa: Span[>..] = [];
+    var sb: Span[>..] = [];
+    for s in ta {
+        if s.len > 0 && a[s.at + s.len - 1] == 10 { sa.push(Span { at: s.at, len: s.len - 1 }); } else { sa.push(s); }
+    }
+    for s in tb {
+        if s.len > 0 && b[s.at + s.len - 1] == 10 { sb.push(Span { at: s.at, len: s.len - 1 }); } else { sb.push(s); }
+    }
+    return tok_changes(a, ta[..], sa[..], b, tb[..], sb[..], o, false, changes);
 }
 
 // diff_sentences adds the changes of a against b to `changes`. The search
@@ -822,7 +862,7 @@ fn diff_words(a: const u8[:], b: const u8[:], o: TokenOptions, changes: Change[>
     for t in tb { sb.push(tok_trim(b, t)); }
     let code, exact = tok_changes(a, ta[..], sa[..], b, tb[..], sb[..], o, false, changes);
     if code != ERR_OK { return code, false; }
-    tok_dedupe(changes, start, a, b);
+    if !o.one_change_per_token { tok_dedupe(changes, start, a, b); }
     return ERR_OK, exact;
 }
 

@@ -41,7 +41,9 @@ fn patch_apply_fuzz(src: const u8[:], sp: SPatch, hunks: const Hunk[:], marks: c
     sz.new_header = Span { at: 0, len: 0 };
     if !sp_model_ok(sz, hunks, nb[..], marks, body, lspans, true) { return ERR_BAD_PATCH; }
     let base = out.len;
-    let code = spatch_apply_into(src, sp, hunks, marks, body, lspans, o, out);
+    var cm: i64 = 0;
+    if o.auto_line_ends { cm = sp_mode(src, sp, hunks, marks, body, lspans); }
+    let code = spatch_apply_into(src, sp, hunks, marks, body, lspans, cm, o, out);
     if code != ERR_OK { out.resize(base, 0); }
     return code;
 }
@@ -59,11 +61,29 @@ fn sp_no_end(marks: const u8[:], li: i64) -> bool {
     return li + 1 < marks.len && marks[li + 1] == '\\';
 }
 
+// sp_cr_extra tells whether the conversion mode 1 adds a carriage return
+// to the hunk line `li`. The line must not end in one, and no marker
+// line may follow it.
+fn sp_cr_extra(body: const u8[:], lspans: const Span[:], marks: const u8[:], li: i64, cm: i64) -> bool {
+    if cm != 1 || marks[li] == '\\' || sp_no_end(marks, li) { return false; }
+    let c = lspans[li];
+    return !(c.len > 0 && body[c.at + c.len - 1] == 13);
+}
+
+// sp_cr_cut tells whether the conversion mode 2 cuts a carriage return
+// from the end of the hunk line `li`.
+fn sp_cr_cut(body: const u8[:], lspans: const Span[:], marks: const u8[:], li: i64, cm: i64) -> bool {
+    if cm != 2 || marks[li] == '\\' { return false; }
+    let c = lspans[li];
+    return c.len > 0 && body[c.at + c.len - 1] == 13;
+}
+
 // sp_matches tells whether the source line `p` is the hunk line `li`.
 // A hunk line holds no line end. A source line must have a line end
-// unless a marker line follows the hunk line.
+// unless a marker line follows the hunk line. The mode `cm` converts the
+// line ends of the hunk line first.
 fn sp_matches(src: const u8[:], ls: const Span[:], body: const u8[:], lspans: const Span[:],
-              li: i64, p: i64, marks: const u8[:]) -> bool {
+              li: i64, p: i64, marks: const u8[:], cm: i64) -> bool {
     if p >= ls.len { return false; }
     // A line with the marker of GNU diff counts for neither side.
     if marks[li] == '\\' { return false; }
@@ -73,16 +93,55 @@ fn sp_matches(src: const u8[:], ls: const Span[:], body: const u8[:], lspans: co
     let has_end = slen > 0 && src[s.at + slen - 1] == 10;
     if has_end { slen = slen - 1; }
     if has_end == sp_no_end(marks, li) { return false; }
-    if slen != c.len { return false; }
-    for k in slen {
+    var clen = c.len;
+    if sp_cr_cut(body, lspans, marks, li, cm) { clen = clen - 1; }
+    let extra = sp_cr_extra(body, lspans, marks, li, cm);
+    if extra { clen = clen + 1; }
+    if slen != clen { return false; }
+    var real = clen;
+    if extra { real = clen - 1; }
+    for k in real {
         if src[s.at + k] != body[c.at + k] { return false; }
     }
+    if extra && src[s.at + real] != 13 { return false; }
     return true;
+}
+
+// sp_mode gives the conversion mode of the line ends: 0 for none, 1 to
+// give the patch the CRLF of the text, 2 to cut the CRLF of the patch.
+fn sp_mode(src: const u8[:], sp: SPatch, hunks: const Hunk[:], marks: const u8[:],
+           body: const u8[:], lspans: const Span[:]) -> i64 {
+    var crlf = false;
+    var bare = false;
+    for i in src.len {
+        if src[i] == 13 && i + 1 < src.len && src[i + 1] == 10 { crlf = true; }
+        if src[i] == 10 && (i == 0 || src[i - 1] != 13) { bare = true; }
+    }
+    var lf = false;
+    for i in src.len { if src[i] == 10 { lf = true; } }
+    let win_src = crlf && !bare;
+    let unix_src = !crlf && lf;
+    if !win_src && !unix_src { return 0; }
+    var any_cr = false;
+    var all_cr = true;
+    for hi in sp.hunks {
+        let h = hunks[sp.first_hunk + hi];
+        for k in h.lines {
+            let li = h.first_line + k;
+            if marks[li] == '\\' { continue; }
+            let c = lspans[li];
+            if c.len > 0 && body[c.at + c.len - 1] == 13 { any_cr = true; }
+            else if !sp_no_end(marks, li) { all_cr = false; }
+        }
+    }
+    if win_src && !any_cr { return 1; }
+    if unix_src && any_cr && all_cr { return 2; }
+    return 0;
 }
 
 // spatch_apply_into walks the hunks and writes the result.
 fn spatch_apply_into(src: const u8[:], sp: SPatch, hunks: const Hunk[:], marks: const u8[:],
-                     body: const u8[:], lspans: const Span[:], o: ApplyOptions,
+                     body: const u8[:], lspans: const Span[:], cm: i64, o: ApplyOptions,
                      out: u8[>..]&) -> i64 {
     var ls: Span[>..] = [];
     split_lines(src, ls);
@@ -120,7 +179,7 @@ fn spatch_apply_into(src: const u8[:], sp: SPatch, hunks: const Hunk[:], marks: 
                     if (side == 0 || step > 0) && pos >= min_line && pos <= max_line {
                         patched.resize(0, Applied { src: -1, hunk_line: 0 });
                         let r = hunk_walk(src, ls, h, marks, body, lspans, 0, pos, errors,
-                                          true, false, patched, 0, work, o.max_work);
+                                          true, false, patched, 0, work, o.max_work, cm);
                         if r >= 0 {
                             found = 1;
                             found_pos = pos;
@@ -151,7 +210,10 @@ fn spatch_apply_into(src: const u8[:], sp: SPatch, hunks: const Hunk[:], marks: 
                 sp_line_at(src, ls, e.src, out);
             } else {
                 let c = lspans[h.first_line + e.hunk_line];
-                for b in c.len { out.push(body[c.at + b]); }
+                var n = c.len;
+                if sp_cr_cut(body, lspans, marks, h.first_line + e.hunk_line, cm) { n = n - 1; }
+                for b in n { out.push(body[c.at + b]); }
+                if sp_cr_extra(body, lspans, marks, h.first_line + e.hunk_line, cm) { out.push(13); }
                 if !sp_no_end(marks, h.first_line + e.hunk_line) { out.push(10); }
             }
             k = k + 1;
@@ -176,7 +238,7 @@ fn spatch_apply_into(src: const u8[:], sp: SPatch, hunks: const Hunk[:], marks: 
 recursive fn hunk_walk(src: const u8[:], ls: const Span[:], h: Hunk, marks: const u8[:],
                        body: const u8[:], lspans: const Span[:], li: i64, pos: i64,
                        errors: i64, last_ok: bool, next_must: bool, patched: Applied[>..]&,
-                       pbase: i64, work: i64&, max_work: i64) -> i64 {
+                       pbase: i64, work: i64&, max_work: i64, cm: i64) -> i64 {
     work = work + 1;
     if work > max_work { return -1; }
     var p = pos;
@@ -192,7 +254,7 @@ recursive fn hunk_walk(src: const u8[:], ls: const Span[:], h: Hunk, marks: cons
             // The marker line counts for neither side.
             i = i + 1;
         } else if m == '-' {
-            if sp_matches(src, ls, body, lspans, lix, p, marks) {
+            if sp_matches(src, ls, body, lspans, lix, p, marks, cm) {
                 p = p + 1;
                 i = i + 1;
                 streak = 0;
@@ -214,7 +276,7 @@ recursive fn hunk_walk(src: const u8[:], ls: const Span[:], h: Hunk, marks: cons
         } else {
             if p >= ls.len { return -1; }
             patched.push(Applied { src: p, hunk_line: i });
-            if sp_matches(src, ls, body, lspans, lix, p, marks) {
+            if sp_matches(src, ls, body, lspans, lix, p, marks, cm) {
                 p = p + 1;
                 streak = streak + 1;
                 last = true;
@@ -226,15 +288,15 @@ recursive fn hunk_walk(src: const u8[:], ls: const Span[:], h: Hunk, marks: cons
                 // deletion that the patch does not hold.
                 let here = patched.len;
                 let r1 = hunk_walk(src, ls, h, marks, body, lspans, i + 1, p + 1, errs - 1,
-                                   false, false, patched, here, work, max_work);
+                                   false, false, patched, here, work, max_work, cm);
                 if r1 >= 0 { return r1; }
                 patched.resize(here, Applied { src: -1, hunk_line: 0 });
                 let r2 = hunk_walk(src, ls, h, marks, body, lspans, i, p + 1, errs - 1,
-                                   false, false, patched, here, work, max_work);
+                                   false, false, patched, here, work, max_work, cm);
                 if r2 >= 0 { return r2; }
                 patched.resize(here, Applied { src: -1, hunk_line: 0 });
                 let r3 = hunk_walk(src, ls, h, marks, body, lspans, i + 1, p, errs - 1,
-                                   false, false, patched, here, work, max_work);
+                                   false, false, patched, here, work, max_work, cm);
                 if r3 >= 0 { return r3; }
                 patched.resize(pbase, Applied { src: -1, hunk_line: 0 });
                 return -1;

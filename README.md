@@ -9,7 +9,7 @@ It finds the blocks of equal lines and the words that match a word best. It comp
 ## Install
 
 ```goose
-import diff from "rekanalar/goose-diff@v0.11.0";
+import diff from "rekanalar/goose-diff@v0.12.0";
 ```
 
 The package uses the standard library only. It has no other dependency.
@@ -78,6 +78,7 @@ The package uses the standard library only. It has no other dependency.
 | `ndiff_restore(delta, which, out)` | Adds the lines of the text `which` (1 or 2) of a delta to `out`, without the codes. Gives a code |
 | `close_matches(word, cands, n, cutoff, out)` | Adds the places of the words that match the word best to `out`. Gives a code |
 | `diff_chars(a, b, o, changes)` | Adds the changes of the characters of `a` against `b` to `changes`. Gives a code and the minimality flag |
+| `diff_lines_text(a, b, o, changes)` | Adds the changes of the lines of `a` against `b`, as `diffLines` of jsdiff does. The rules `ignore_whitespace`, `ignore_newline_at_eof` and `one_change_per_token` apply |
 | `diff_lines_trimmed(a, b, o, changes)` | Adds the changes of the lines of `a` against `b` to `changes`. It cuts the white space at the ends of the lines |
 | `diff_sentences(a, b, o, changes)` | Adds the changes of the sentences of `a` against `b` to `changes`. Gives a code and the minimality flag |
 | `diff_arrays(a, b, ta, tb, o, changes)` | Adds the changes of the two lists of tokens to `changes`. The tokens stand in the two texts |
@@ -173,6 +174,8 @@ library does.
 | `ignore_whitespace` | The white space at the ends of a token does not matter | false |
 | `strip_trailing_cr` | The carriage return that stands before a line feed does not matter | false |
 | `newline_is_token` | The line end is a token of its own | false |
+| `ignore_newline_at_eof` | A line end at the end of a line does not matter. Acts in `diff_lines_text` when `ignore_whitespace` and `newline_is_token` are off | false |
+| `one_change_per_token` | Every token is a change of its own. The word search does not move white space | false |
 | `max_tokens` | The most tokens of the two texts. It goes from 1 to 8000000 | 2000000 |
 
 The rule `newline_is_token` changes the line searches only. The rule `ignore_whitespace` has no effect on the trimmed line search, which always cuts the white space.
@@ -185,6 +188,8 @@ The rule `newline_is_token` changes the line searches only. The rule `ignore_whi
 | `max_work` | The most line compares that the search spends | 50000000 |
 | `max_shift` | The most lines that a hunk may move from the place of its header | 1000000 |
 | `max_input` | The most bytes of the text | 16777216 |
+| `fuzz` | The most context lines of a hunk that may mismatch | 0 |
+| `auto_line_ends` | Convert the line ends of the patch when the text uses only CRLF and the patch only LF, or the reverse. Acts in `patch_apply_fuzz` | true |
 
 ### The codes
 
@@ -206,7 +211,7 @@ A call that fails leaves the buffer of the caller as it was.
 
 ```goose
 import std;
-import diff from "rekanalar/goose-diff@v0.11.0";
+import diff from "rekanalar/goose-diff@v0.12.0";
 
 fn main() {
     var out: u8[>..] = [];
