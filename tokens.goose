@@ -321,17 +321,31 @@ fn tok_lower(text: const u8[:], parts: const Span[:], out: u8[>..]&, spans: Span
 }
 
 // tok_segments gives the segments of the text at the word bounds of
-// Unicode, or at the cluster bounds when `graphemes` is true. It gives
-// false when the text is too long for the Unicode package.
+// Unicode, or at the cluster bounds when `graphemes` is true. The Unicode
+// package takes at most 1 MiB, so the text splits after a line feed
+// into chunks below that size. A break always stands after a line feed.
+// It gives false when one line is longer than the cap.
 fn tok_segments(text: const u8[:], graphemes: bool, o: TokenOptions, out: Span[>..]&) -> bool {
-    var offs: i64[>..] = [];
-    var code: i64 = 0;
-    if graphemes { code = unicode::grapheme_offsets(offs, text); } else { code = unicode::word_offsets(offs, text); }
-    if code != 0 || offs.len > o.max_tokens { return false; }
-    for k in offs.len {
-        var end = text.len;
-        if k + 1 < offs.len { end = offs[k + 1]; }
-        out.push(Span { at: offs[k], len: end - offs[k] });
+    let cap: i64 = 1048576;
+    var from: i64 = 0;
+    while from < text.len {
+        var to = from + cap;
+        if to >= text.len {
+            to = text.len;
+        } else {
+            while to > from && text[to - 1] != 10 { to = to - 1; }
+            if to == from { return false; }
+        }
+        var offs: i64[>..] = [];
+        var code: i64 = 0;
+        if graphemes { code = unicode::grapheme_offsets(offs, text[from..to]); } else { code = unicode::word_offsets(offs, text[from..to]); }
+        if code != 0 || out.len + offs.len > o.max_tokens { return false; }
+        for k in offs.len {
+            var end = to - from;
+            if k + 1 < offs.len { end = offs[k + 1]; }
+            out.push(Span { at: from + offs[k], len: end - offs[k] });
+        }
+        from = to;
     }
     return true;
 }

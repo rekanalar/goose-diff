@@ -1767,6 +1767,24 @@ fn test_unicode() {
     // The final sigma: each letter folds alone, as toLowerCase does.
     assert(unicode_is("ΣΑΣ x"[..], "σας x"[..], 4, "= σα|- Σ|+ ς|=  x|"[..]));
     assert(unicode_is("Straße"[..], "STRASSE"[..], 4, "- Straße|+ STRASSE|"[..]));
+    // A text past the 1 MiB cap of the Unicode package splits after line feeds.
+    var big: u8[>..] = [];
+    for k in 3000 { for j in 700 { big.push('a'); } big.push(10); }
+    var big2: u8[>..] = [];
+    for c in big { big2.push(c); }
+    big2.push('z');
+    var o = diff::default_token_options();
+    o.max_tokens = 8000000;
+    var ch: diff::Change[>..] = [];
+    let code, ex = diff::diff_unicode_words(big[..], big2[..], o, ch);
+    assert(code == diff::ERR_OK);
+    assert(ch.len == 2);
+    // One line past the cap is a fault.
+    var line: u8[>..] = [];
+    for k in 1100000 { line.push('a'); }
+    var ch2: diff::Change[>..] = [];
+    let code2, ex2 = diff::diff_graphemes(line[..], big2[..], o, ch2);
+    assert(code2 == diff::ERR_TOO_LARGE);
 }
 
 fn test_jsdiff_options() {
