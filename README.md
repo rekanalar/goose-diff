@@ -9,7 +9,7 @@ It finds the blocks of equal lines and the words that match a word best. It comp
 ## Install
 
 ```goose
-import diff from "rekanalar/goose-diff@v0.8.0";
+import diff from "rekanalar/goose-diff@v0.9.0";
 ```
 
 The package uses the standard library only. It has no other dependency.
@@ -36,6 +36,8 @@ The package uses the standard library only. It has no other dependency.
 - **A diff that reads well.** The package holds the search of `difflib`. It finds the longest block of equal lines that holds no junk. The blocks read well to a person.
 - **The unified format.** The output follows GNU `diff -u`. It holds the file names, the hunk headers and the lines of the change.
 - **The patch of several files.** One patch holds many files, each with many hunks. The reader skips the lines before a file header, such as `Index:` and `diff --git`.
+- **The structured patch.** `structured_patch` builds the hunk structure of jsdiff from two texts. `patch_text` and `format_patch` write it as text, `create_patch` in the form with the line of `Index:`. `patch_parse_structured` reads one file of a patch into it. `patch_reverse` flips it. `patch_apply_fuzz` applies it, with a rule for context lines that may mismatch.
+- **The XML and DMP forms.** `changes_xml` and `changes_dmp` give a change list in the XML and the `diff-match-patch` forms. The XML form escapes `&`, `<`, `>` and the quote, as jsdiff does.
 - **The apply of a patch.** The apply checks every context line and every removed line. It finds a hunk that sits at another line than its header says.
 - **The reverse apply.** The patch takes the text back to the form before the change.
 - **Four searches.** The rule `algorithm` takes `ALG_MYERS`, `ALG_RO` (the matcher of `difflib`), `ALG_PATIENCE` and `ALG_LCS`. The Patience search matches the Rust crate `similar` step by step.
@@ -78,9 +80,18 @@ The package uses the standard library only. It has no other dependency.
 | `diff_words_with_space(a, b, o, changes)` | Adds the changes of the words of `a` against `b` to `changes`. The white space between the words matters |
 | `patch_parse(text, files, hunks, body)` | Reads a unified patch. Gives a code |
 | `patch_apply(src, text, files, hunks, body, file, o, out)` | Adds the text of `src` after one file of a patch is applied. Gives a code |
+| `structured_patch(a_name, b_name, a, b, a_header, b_header, o, sp, hunks, names, marks, body, lspans)` | Builds the structured patch of `a` against `b` into the flat buffers. Gives a code |
+| `patch_text(sp, hunks, names, marks, body, lspans, out)` | Writes the structured patch as patch text. The line of `Index:` appears when the two names are equal. Gives a code |
+| `format_patch(sp, hunks, names, marks, body, lspans, out)` | Writes a structured patch as patch text, as `patch_text` does. Gives a code |
+| `create_patch(name, a, b, a_header, b_header, o, sp, hunks, names, marks, body, lspans, out)` | Builds the patch of one file and writes it. Gives a code |
+| `patch_parse_structured(text, file, sp, hunks, names, marks, body, lspans)` | Reads one file of a patch into the structured model. Gives a code |
+| `patch_reverse(sp, hunks, names, marks, fsp, fhunks, fnames, fmarks)` | Fills the flipped patch. The flipped patch shares the body lines with the patch. Gives a code |
+| `patch_apply_fuzz(src, sp, hunks, marks, body, lspans, o, out)` | Applies a structured patch. The rule `fuzz` gives the most context lines that may mismatch. Gives a code |
+| `changes_xml(changes, a, b, out)` | Writes the change list in the XML form. Removed text goes into `<del>`, added text into `<ins>`. The text is escaped. Gives a code |
+| `changes_dmp(changes, a, b, out)` | Writes the change list as the `diff-match-patch` array of pairs of a tag and a text. Gives a code |
 | `default_options()` | The rules of most calls: 3 lines of context, 2000 edits, 16 MiB of input |
 | `default_token_options()` | The rules of most token searches: 2000 edits, 16 MiB of input, no switch |
-| `default_apply_options()` | The rules of most applies: a forward apply, 50 million compares, a shift of 1 million lines, 16 MiB of input |
+| `default_apply_options()` | The rules of most applies: a forward apply, 50 million compares, no fuzz, a shift of 1 million lines, 16 MiB of input |
 | `error_text(code)` | Names a code |
 
 ### The opcodes
@@ -186,7 +197,7 @@ A call that fails leaves the buffer of the caller as it was.
 
 ```goose
 import std;
-import diff from "rekanalar/goose-diff@v0.8.0";
+import diff from "rekanalar/goose-diff@v0.9.0";
 
 fn main() {
     var out: u8[>..] = [];
@@ -202,6 +213,11 @@ fn main() {
 - **The Patience search spends from a budget.** It counts the rounds and the compares of its Myers searches. At `max_work` the range that is left becomes one replace. The diff stays valid, but not minimal. The call says so with its flag.
 - **The LCS table has a cap.** The table holds at most 16777216 cells, which is 64 MB. A pair of texts that needs more gives `ERR_TOO_MUCH_WORK`. So does a table past `max_work`. The Rust crate holds the table in a map with no cap. Memory grows with the product of the two lengths.
 - **The Patience search maps the ids onto a dense range.** It gives every distinct id a place in a map. The map holds one slot per distinct id. A caller may pass ids of any value, even a negative one. No id can reach past the arrays of the counts.
+- **The fuzz apply spends from a budget.** Every try of a hunk place counts one compare. A patch against a large text with a small budget gives `ERR_TOO_MUCH_WORK`, not a hang. The cap of the rule `fuzz` is 100.
+- **A structured fault changes nothing.** `structured_patch`, `patch_reverse` and `patch_apply_fuzz` build their output apart. They copy it after every check passes.
+- **The model ranges are checked.** Every place and every count of the model must lie inside its buffer. A model that a caller builds with a range past its buffer gives `ERR_BAD_PATCH`. So a bad range cannot read past the buffer.
+- **The apply stays inside the source.** A hunk that asks for more lines than the text holds gives `ERR_NO_MATCH`. The Node library reads past the end and stops the process.
+- **The change list is checked against its texts.** Every change must lie inside the text that it names. A change with a place past its text gives `ERR_BAD_OPTION`.
 - **The JSON writer holds no recursion.** It walks the tree with a stack in a buffer. A text of `[` repeated one million times cannot overflow the call stack. The Node library recurses and fails on deep input.
 - **The canonical text has a size cap.** It may not pass eight times the rule `max_input`. A deep text has an output of the order of its depth squared, because every level adds an indent. The cap gives `ERR_TOO_LARGE` instead.
 - **The call `diff_json` caps each canonical text at `max_input`.** It stops at the cap before it compares. A deep pair cannot cost memory for a result that the call then refuses.
@@ -254,6 +270,7 @@ Risks that stay: the package reads a patch and a text from the caller. It does n
 - **A last line without a line end gets one.** The delta holds that line with a line end. `ndiff_restore` gives it back with a line end. The Python library keeps the line as it is.
 - **The delta takes no junk function.** The search of the lines follows the rules `autojunk` and `strip_trailing_cr` of the call. The search inside a line treats the blank and the tab as junk, as Python does. Python lets the caller change both rules.
 - **The diff works on lines.** The call `diff_lines` compares whole lines. A change inside a line shows the whole line on each side. The token searches show the change inside the line.
+- **A large fuzz apply takes time.** The budget is 50 million compares. A hunk that matches nowhere searches every place of a large text. Lower `max_work` and `max_shift` for a patch from a network.
 - **The word searches hold the white space twice.** The Node library gives the white space between two words to both. A change there holds it twice.
 
 The package gives the white space to one word and then moves it. The changes hold the same bytes as the changes of the Node library.
@@ -274,6 +291,10 @@ The package gives the white space to one word and then moves it. The changes hol
 - **The flag of the minimality runs on small texts.** The check counts the longest common subsequence of the two texts. It runs only for small texts: a million lines each, and a million pairs. Past that, the flag is false.
 - **The unified output holds no time stamp.** GNU `diff -u` writes the time of each file into the two header lines. The package writes only the names that the caller gives.
 - **The diff of two texts may differ from the diff of GNU**. The reference libraries pick different anchors when more than one diff is minimal. GNU `diff` skips the search when it thinks the cost is too high. So its diff is not always minimal. The package always gives a minimal diff, unless the rule `max_edits` stops the search first. The rule `algorithm` gives the search of `difflib`, which picks other anchors.
+- **The hunks of `structured_patch` may sit elsewhere than those of jsdiff.** The two libraries pick other anchors. The counts of changes stay the same. Of 200 random cases, 191 hold the byte-for-byte hunks of jsdiff.
+- **The structured patch holds one file.** The caller loops over the files of a patch with several files. jsdiff walks them through callbacks. The reader `patch_parse_structured` takes one file by index.
+- **A header holds one line.** jsdiff lets a header hold line ends. The builder refuses a name or a header with a line end, as the patch reader of the package does.
+- **The writer always takes the tab of a header.** jsdiff leaves the tab out when the caller passes no header. The package writes one tab for every header, even an empty one.
 - **The apply of a patch works on one file at a time**. A patch of many files needs one call per file. The call takes the index of the file.
 - **The read of a patch takes no limit of bytes**. The count of files and the count of hunks are bounded. The size of the patch is not. Your program bounds the size of a patch from a network.
 - **The apply takes the same text that the read took**. The call holds the patch bytes apart from the parsed places. Give it the text that `patch_parse` read. Another text holds places that do not fit.

@@ -198,11 +198,14 @@ struct ApplyOptions {
     max_shift: i64,
     // The most bytes of the text.
     max_input: i64,
+    // The most context lines of a hunk that may mismatch. A removed
+    // line must always match. The rule of the fuzz factor of jsdiff.
+    fuzz: i64,
 }
 
 // default_apply_options gives a forward apply with 50 million compares.
 fn default_apply_options() -> ApplyOptions {
-    return ApplyOptions { reverse: false, max_work: 50000000, max_shift: 1000000, max_input: 16777216 };
+    return ApplyOptions { reverse: false, max_work: 50000000, max_shift: 1000000, max_input: 16777216, fuzz: 0 };
 }
 
 // marker_of gives the marker of a body line. An empty line counts as a

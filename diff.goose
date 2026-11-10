@@ -19,6 +19,9 @@ import tokens;
 import context;
 import cssdiff;
 import algos;
+import spatch;
+import spatchapply;
+import converts;
 import jsondiff;
 import ndiff;
 
