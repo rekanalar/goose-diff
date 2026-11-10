@@ -9,7 +9,7 @@ It finds the blocks of equal lines and the words that match a word best. It comp
 ## Install
 
 ```goose
-import diff from "rekanalar/goose-diff@v0.9.0";
+import diff from "rekanalar/goose-diff@v0.10.0";
 ```
 
 The package uses the standard library only. It has no other dependency.
@@ -22,6 +22,7 @@ The package uses the standard library only. It has no other dependency.
 | Python `difflib` | The opcodes of the change, the grouping of hunks, the format of a range, the format of a unified diff |
 | Python `difflib` | `context_diff` |
 | Python `difflib` | `ndiff` with the lines of hints, and `restore` |
+| Python `difflib` | `HtmlDiff` with `make_table` and `make_file` |
 | Node `diff` (jsdiff) | `createPatch`, `applyPatch`, the reading of a patch, the reverse apply |
 | Node `diff` (jsdiff) | `diffChars`, `diffTrimmedLines`, `diffSentences`, `diffArrays`, the switches of the options |
 | Node `diff` (jsdiff) | `diffCss`, `diffJson`, and the canonical form of a JSON value |
@@ -44,6 +45,7 @@ The package uses the standard library only. It has no other dependency.
 - **The CSS and JSON searches.** `diff_css` compares the tokens of a style sheet. `diff_json` writes both JSON texts in one canonical form with sorted keys, then compares the lines. A comma at the end of a line does not count.
 - **The context format.** `context_diff` writes the context diff of `difflib`. The hunks follow the rule `context`.
 - **The delta with hints.** `ndiff` writes the delta of `difflib`. A pair of close lines gets a line of hints that marks the changed characters. `ndiff_restore` takes one of the two texts back out of a delta.
+- **The side by side HTML diff.** `html_table` and `html_file` write the table and the page of `HtmlDiff`. The table holds the line numbers and the links to the changes. It marks the changes inside a line. It has a context form and wraps long lines. The bytes follow Python 3.14.
 - **The close words.** The package finds the words that match a word best. It compares the words by their characters.
 - **The token searches.** The package compares the characters, the sentences and the tokens that the caller gives. It also compares the lines without the white space at their ends.
 - **The word searches.** The package compares the words of two texts. One search ignores the white space between the words. The other keeps it.
@@ -91,6 +93,9 @@ The package uses the standard library only. It has no other dependency.
 | `changes_dmp(changes, a, b, out)` | Writes the change list as the `diff-match-patch` array of pairs of a tag and a text. Gives a code |
 | `default_options()` | The rules of most calls: 3 lines of context, 2000 edits, 16 MiB of input |
 | `default_token_options()` | The rules of most token searches: 2000 edits, 16 MiB of input, no switch |
+| `html_table(a, b, from_desc, to_desc, o, h, out)` | Adds the side by side HTML table of `a` against `b`. Gives a code |
+| `html_file(a, b, from_desc, to_desc, charset, o, h, out)` | Adds a full HTML page with the table, the style and the legend. Gives a code |
+| `default_html_options()` | The rules of Python: a tab stop of 8, no break, all lines, 5 lines, prefix 0, 64 MiB of output |
 | `default_apply_options()` | The rules of most applies: a forward apply, 50 million compares, no fuzz, a shift of 1 million lines, 16 MiB of input |
 | `error_text(code)` | Names a code |
 
@@ -197,7 +202,7 @@ A call that fails leaves the buffer of the caller as it was.
 
 ```goose
 import std;
-import diff from "rekanalar/goose-diff@v0.9.0";
+import diff from "rekanalar/goose-diff@v0.10.0";
 
 fn main() {
     var out: u8[>..] = [];
@@ -213,6 +218,10 @@ fn main() {
 - **The Patience search spends from a budget.** It counts the rounds and the compares of its Myers searches. At `max_work` the range that is left becomes one replace. The diff stays valid, but not minimal. The call says so with its flag.
 - **The LCS table has a cap.** The table holds at most 16777216 cells, which is 64 MB. A pair of texts that needs more gives `ERR_TOO_MUCH_WORK`. So does a table past `max_work`. The Rust crate holds the table in a map with no cap. Memory grows with the product of the two lengths.
 - **The Patience search maps the ids onto a dense range.** It gives every distinct id a place in a map. The map holds one slot per distinct id. A caller may pass ids of any value, even a negative one. No id can reach past the arrays of the counts.
+- **The HTML text is escaped.** The table escapes `&`, `<` and `>` in every line. It escapes the two descriptions too, and the quote as well. Python writes the two descriptions as they are, so a name with markup injects HTML.
+- **The marks of the table stay out of the text.** Python uses the bytes 0 and 1 as inner marks. A text with such a byte breaks its markup. The package gives `ERR_BAD_TEXT` for a text or a description with one.
+- **The page charset is checked.** It may hold letters, digits and `-_.:` only. Python writes the charset into the page as it is.
+- **The HTML output has a cap.** The rule `max_output` bounds the bytes of the table and of the tab expand. A break at column 1 or a tab stop of a million cannot fill memory.
 - **The fuzz apply spends from a budget.** Every try of a hunk place counts one compare. A patch against a large text with a small budget gives `ERR_TOO_MUCH_WORK`, not a hang. The cap of the rule `fuzz` is 100.
 - **A structured fault changes nothing.** `structured_patch`, `patch_reverse` and `patch_apply_fuzz` build their output apart. They copy it after every check passes.
 - **The model ranges are checked.** Every place and every count of the model must lie inside its buffer. A model that a caller builds with a range past its buffer gives `ERR_BAD_PATCH`. So a bad range cannot read past the buffer.
@@ -270,6 +279,10 @@ Risks that stay: the package reads a patch and a text from the caller. It does n
 - **A last line without a line end gets one.** The delta holds that line with a line end. `ndiff_restore` gives it back with a line end. The Python library keeps the line as it is.
 - **The delta takes no junk function.** The search of the lines follows the rules `autojunk` and `strip_trailing_cr` of the call. The search inside a line treats the blank and the tab as junk, as Python does. Python lets the caller change both rules.
 - **The diff works on lines.** The call `diff_lines` compares whole lines. A change inside a line shows the whole line on each side. The token searches show the change inside the line.
+- **The HTML page is UTF-8.** Python encodes the page into the charset. The package names the charset and writes UTF-8.
+- **The anchor prefix is a rule.** Python counts the tables of a page with a global counter. The package takes the number in the rule `prefix`. Give each table of a page its own number.
+- **The table takes no junk function.** Python passes `linejunk` and `charjunk` to `ndiff`. The package uses the rules of `ndiff`: no line junk, and the blank and the tab as character junk.
+- **A line end ends a line.** The table splits a text at the line feed. A carriage return stays in the line and resets the column of the tab stops.
 - **A large fuzz apply takes time.** The budget is 50 million compares. A hunk that matches nowhere searches every place of a large text. Lower `max_work` and `max_shift` for a patch from a network.
 - **The word searches hold the white space twice.** The Node library gives the white space between two words to both. A change there holds it twice.
 

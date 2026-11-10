@@ -22,6 +22,7 @@ import algos;
 import spatch;
 import spatchapply;
 import converts;
+import htmldiff;
 import jsondiff;
 import ndiff;
 
@@ -41,6 +42,7 @@ fn error_text(code: i64) -> const u8[:] {
     if code == ERR_TOO_MUCH_WORK { return "the search for a hunk took too much work"; }
     if code == ERR_NO_FILE { return "the patch holds no such file"; }
     if code == ERR_BAD_JSON { return "the text is not JSON"; }
+    if code == ERR_BAD_TEXT { return "a text holds the byte 0 or the byte 1"; }
     return "unknown code";
 }
 

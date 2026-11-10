@@ -143,11 +143,19 @@ fn nd_ratio(ida: const i32[:], idb: const i32[:], junk: const u8[:], best: f64, 
     return ERR_OK, 2.0 * matches / total;
 }
 
+// nd_cmp gives the part of a line that the search compares. A bare
+// search leaves the line end out, as the Python library does when its
+// lines hold no line end.
+fn nd_cmp(text: const u8[:], s: Span, bare: bool) -> Span {
+    if bare && s.len > 0 && text[s.at + s.len - 1] == 10 { return Span { at: s.at, len: s.len - 1 }; }
+    return s;
+}
+
 // nd_replace adds a replace block. It looks for close pairs of lines and
 // marks the characters that differ inside each pair.
 fn nd_replace(out: u8[>..]&, a: const u8[:], la: const Span[:], alo: i64, ahi: i64,
               b: const u8[:], lb: const Span[:], blo: i64, bhi: i64,
-              max_work: i64, work: i64&) -> i64 {
+              max_work: i64, work: i64&, bare: bool) -> i64 {
     let cutoff: f64 = 0.74999;
     var tok = default_token_options();
     tok.max_tokens = 1 << 40;
@@ -162,7 +170,8 @@ fn nd_replace(out: u8[>..]&, a: const u8[:], la: const Span[:], alo: i64, ahi: i
     var dump_j = blo;
     for j in blo..bhi {
         sb.resize(0, Span { at: 0, len: 0 });
-        let cj = b[lb[j].at..lb[j].at + lb[j].len];
+        let sj = nd_cmp(b, lb[j], bare);
+        let cj = b[sj.at..sj.at + sj.len];
         tok_chars(cj, tok, sb);
         let aequiv = alo + (j - blo);
         var lo = aequiv - NDIFF_WINDOW;
@@ -177,8 +186,10 @@ fn nd_replace(out: u8[>..]&, a: const u8[:], la: const Span[:], alo: i64, ahi: i
             work = work + la[i].len + lb[j].len + 1;
             if work > max_work { return ERR_TOO_MUCH_WORK; }
             sa.resize(0, Span { at: 0, len: 0 });
-            tok_chars(a[la[i].at..la[i].at + la[i].len], tok, sa);
-            nd_pair(a[la[i].at..la[i].at + la[i].len], sa[..], cj, sb[..], ida, idb, junk);
+            let si = nd_cmp(a, la[i], bare);
+            let ci = a[si.at..si.at + si.len];
+            tok_chars(ci, tok, sa);
+            nd_pair(ci, sa[..], cj, sb[..], ida, idb, junk);
             let code, r = nd_ratio(ida[..], idb[..], junk[..], best, max_work, work);
             if code != ERR_OK { return code; }
             if r > best {
@@ -189,8 +200,10 @@ fn nd_replace(out: u8[>..]&, a: const u8[:], la: const Span[:], alo: i64, ahi: i
         }
         if best_i < 0 { continue; }
         nd_helper(out, a, la, dump_i, best_i, b, lb, dump_j, best_j);
-        let ca = a[la[best_i].at..la[best_i].at + la[best_i].len];
-        let cb = b[lb[best_j].at..lb[best_j].at + lb[best_j].len];
+        let sai = nd_cmp(a, la[best_i], bare);
+        let sbj = nd_cmp(b, lb[best_j], bare);
+        let ca = a[sai.at..sai.at + sai.len];
+        let cb = b[sbj.at..sbj.at + sbj.len];
         if ca != cb {
             sa.resize(0, Span { at: 0, len: 0 });
             sb.resize(0, Span { at: 0, len: 0 });
@@ -235,6 +248,12 @@ fn nd_replace(out: u8[>..]&, a: const u8[:], la: const Span[:], alo: i64, ahi: i
 // `max_work`, `max_input` and `max_tokens` apply. A line without a line
 // end gets one in the delta. A call that fails leaves `out` as it was.
 fn ndiff(a: const u8[:], b: const u8[:], o: Options, out: u8[>..]&) -> i64 {
+    return ndiff_into(a, b, o, false, out);
+}
+
+// ndiff_into is ndiff with the choice of the bare search. A bare search
+// compares the lines without their line ends.
+fn ndiff_into(a: const u8[:], b: const u8[:], o: Options, bare: bool, out: u8[>..]&) -> i64 {
     if !options_ok(o) { return ERR_BAD_OPTION; }
     if a.len > o.max_input || b.len > o.max_input { return ERR_TOO_LARGE; }
     var la: Span[>..] = [];
@@ -259,7 +278,7 @@ fn ndiff(a: const u8[:], b: const u8[:], o: Options, out: u8[>..]&) -> i64 {
             nd_dump(buf, '+', b, lb[..], op.b_lo, op.b_hi);
         } else {
             let code = nd_replace(buf, a, la[..], op.a_lo, op.a_hi, b, lb[..], op.b_lo, op.b_hi,
-                                  o.max_work, work);
+                                  o.max_work, work, bare);
             if code != ERR_OK { return code; }
         }
     }
