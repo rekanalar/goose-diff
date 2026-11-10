@@ -362,7 +362,14 @@ fn tok_cut(text: const u8[:], from: i64) -> i64, bool {
 fn tok_segments(text: const u8[:], graphemes: bool, o: TokenOptions, out: Span[>..]&) -> bool {
     var from: i64 = 0;
     var join = false;
+    var seam = false;
     while from < text.len {
+        if seam {
+            // The last cut stood inside one token. A short window around
+            // the cut tells whether the rules give a break there.
+            join = !tok_break_at(text, from, graphemes);
+            seam = false;
+        }
         var to, inside = tok_cut(text, from);
         var offs: i64[>..] = [];
         var code: i64 = 0;
@@ -374,11 +381,15 @@ fn tok_segments(text: const u8[:], graphemes: bool, o: TokenOptions, out: Span[>
         if graphemes { code = unicode::grapheme_offsets(offs, text[from..window]); } else { code = unicode::word_offsets(offs, text[from..window]); }
         if code != 0 { return false; }
         if to < 0 {
-            // No safe place by the bytes. The segments of the window are
-            // true bounds, except the last two, which may need more text.
-            if offs.len < 3 { return false; }
-            to = from + offs[offs.len - 2];
-            offs.resize(offs.len - 2, 0);
+            if offs.len < 3 {
+                // One token fills the window: cut here and test the seam.
+                to = window;
+                seam = true;
+            } else {
+                // The last two segments may need more text.
+                to = from + offs[offs.len - 2];
+                offs.resize(offs.len - 2, 0);
+            }
             inside = false;
         }
         if out.len + offs.len > o.max_tokens { return false; }
@@ -395,6 +406,23 @@ fn tok_segments(text: const u8[:], graphemes: bool, o: TokenOptions, out: Span[>
         from = to;
     }
     return true;
+}
+
+// tok_break_at tells whether the rules of Unicode give a break at the
+// place `at`. It segments a window of 64 bytes on each side of the place.
+fn tok_break_at(text: const u8[:], at: i64, graphemes: bool) -> bool {
+    var lo = at - 64;
+    if lo < 0 { lo = 0; }
+    while lo < at && (text[lo] & 192) == 128 { lo = lo + 1; }
+    var hi = at + 64;
+    if hi > text.len { hi = text.len; }
+    while hi > at && hi < text.len && (text[hi] & 192) == 128 { hi = hi - 1; }
+    var offs: i64[>..] = [];
+    var code: i64 = 0;
+    if graphemes { code = unicode::grapheme_offsets(offs, text[lo..hi]); } else { code = unicode::word_offsets(offs, text[lo..hi]); }
+    if code != 0 { return true; }
+    for k in offs.len { if lo + offs[k] == at { return true; } }
+    return false;
 }
 
 // tok_segment_parts gives the parts of the word search from the word

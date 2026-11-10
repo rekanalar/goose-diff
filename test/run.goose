@@ -1800,12 +1800,14 @@ fn test_unicode() {
     var ch5: diff::Change[>..] = [];
     assert(diff::diff_lines_text(mixed[..], "one 2\nthree\n"[..], o, ch5) == diff::ERR_OK);
     assert(diff::diff_unicode_words(mixed[..], "one 2\nthree\n"[..], o, ch5) == diff::ERR_OK);
-    // One word of more than 1 MiB that is no ASCII is a fault.
+    // One word of more than 1 MiB that is no ASCII is one token.
     var wide: u8[>..] = [];
     for k in 600000 { wide.push(0xC3); wide.push(0xA9); }
     var ch4: diff::Change[>..] = [];
     let code4, ex4 = diff::diff_unicode_words(wide[..], one[..], o, ch4);
-    assert(code4 == diff::ERR_TOO_LARGE);
+    assert(code4 == diff::ERR_OK);
+    assert(ch4.len == 2);
+    assert(ch4[0].len == 1200000);
 }
 
 fn test_jsdiff_options() {
