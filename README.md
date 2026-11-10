@@ -40,10 +40,12 @@ The word bounds, the cluster bounds and the case fold of Unicode come from that 
 ## Features
 
 - **A minimal diff of two texts.** The search is the Myers diff. The result holds the opcodes of the change, as `difflib` gives them.
+- **Two ratios.** `matcher_ratio` counts the blocks of the `difflib` matcher. `diff_ratio` counts the equal lines of the diff, as `similar` does.
 - **A diff that reads well.** The package holds the search of `difflib`. It finds the longest block of equal lines that holds no junk. The blocks read well to a person.
 - **The unified format.** The output follows GNU `diff -u`. It holds the file names, the hunk headers and the lines of the change.
 - **The patch of several files.** One patch holds many files, each with many hunks. The reader skips the lines before a file header, such as `Index:` and `diff --git`.
 - **The structured patch.** `structured_patch` builds the hunk structure of jsdiff from two texts. `patch_text` and `format_patch` write it as text, `create_patch` in the form with the line of `Index:`. `patch_parse_structured` reads one file of a patch into it. `patch_reverse` flips it. `patch_apply_fuzz` applies it, with a rule for context lines that may mismatch.
+- **The header options of a patch.** `HeaderOptions` names the parts of the header. `format_patch_opts` takes them. The three rules of jsdiff have a constructor each.
 - **The XML and DMP forms.** `changes_xml` and `changes_dmp` give a change list in the XML and the `diff-match-patch` forms. The XML form escapes `&`, `<`, `>` and the quote, as jsdiff does.
 - **The apply of a patch.** The apply checks every context line and every removed line. It finds a hunk that sits at another line than its header says.
 - **The reverse apply.** The patch takes the text back to the form before the change.
@@ -293,7 +295,6 @@ Risks that stay: the package reads a patch and a text from the caller. It does n
 
 - **Two ratios exist, and the references disagree.** `matcher_ratio` counts the blocks of the `difflib` matcher. `diff_ratio` counts the equal lines of the diff, as `similar` does. The two values can differ for the same texts. No standard fixes the choice, so the package offers both.
 - **Python `difflib` ends a last line in another way.** It writes no marker for a last line with no end. The package writes `\ No newline at end of file`, as GNU `diff`, jsdiff and `similar` do.
-- **An absent header needs a switch.** jsdiff writes no tab for an undefined header. It writes a tab for an empty one. The writers write the tab for both, unless `skip_empty_header` is true.
 - **The Unicode splits use the default rules.** They follow UAX 29 with no dictionary and no locale. A text in Chinese, Japanese, Thai, Lao, Khmer or Burmese splits where the default rules split it. The Node `Intl.Segmenter` may split these texts at the word of a dictionary. The Rust crate `unicode-segmentation` splits as the package does. The package has no list of abbreviations.
 - **`unicode_case` lowers each token alone.** A one-letter capital sigma stays `σ`, as in the Node library.
 - **The inline search uses the Patience search for the words.** The rule `algorithm` names the search of the lines. The words always use `ALG_PATIENCE`, as `similar` does.
@@ -344,7 +345,7 @@ The package gives the white space to one word and then moves it. The changes hol
 - **The hunks of `structured_patch` may sit elsewhere than those of jsdiff.** The two libraries pick other anchors. The counts of changes stay the same. Of 200 random cases, 191 hold the byte-for-byte hunks of jsdiff.
 - **The structured patch holds one file.** The caller loops over the files of a patch with several files. jsdiff walks them through callbacks. The reader `patch_parse_structured` takes one file by index.
 - **A header holds one line.** jsdiff lets a header hold line ends. The builder refuses a name or a header with a line end, as the patch reader of the package does.
-- **The writer always takes the tab of a header.** jsdiff leaves the tab out when the caller passes no header. The package writes one tab for every header, even an empty one.
+- **The writer takes the tab of a header.** jsdiff leaves the tab out when the caller passes no header. The package writes one tab for every header, even an empty one. The rule `skip_empty_header` leaves the tab out for an empty header.
 - **The apply of a patch reads no file**. `patch_apply_all` takes the sources from the caller, one per file. `patch_apply` takes the index of one file.
 - **The read of a patch takes no limit of bytes**. The count of files and the count of hunks are bounded. The size of the patch is not. Your program bounds the size of a patch from a network.
 - **The apply takes the same text that the read took**. The call holds the patch bytes apart from the parsed places. Give it the text that `patch_parse` read. Another text holds places that do not fit.
