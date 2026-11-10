@@ -1327,6 +1327,66 @@ fn test_spatch_eof() {
 }
 
 
+fn test_header_options() {
+    // The bytes of formatPatch in jsdiff 8.0.4 for each header option.
+    var sp: diff::SPatch = diff::SPatch { old_name: diff::Span { at: 0, len: 0 }, new_name: diff::Span { at: 0, len: 0 }, old_header: diff::Span { at: 0, len: 0 }, new_header: diff::Span { at: 0, len: 0 }, first_hunk: 0, hunks: 0 };
+    var hu: diff::Hunk[>..] = [];
+    var names: u8[>..] = [];
+    var marks: u8[>..] = [];
+    var body: u8[>..] = [];
+    var lspans: diff::Span[>..] = [];
+    var o = diff::default_options();
+    o.context = 3;
+    assert(diff::structured_patch("a.txt", "b.txt", "one\ntwo\n", "one\nthree\n", "h1", "h2", o, sp, hu, names, marks, body, lspans) == diff::ERR_OK);
+    var full: u8[>..] = [];
+    assert(diff::format_patch_opts(sp, hu[..], names[..], marks[..], body[..], lspans[..], diff::default_header_options(), full) == diff::ERR_OK);
+    assert(full == "===================================================================\n--- a.txt\th1\n+++ b.txt\th2\n@@ -1,2 +1,2 @@\n one\n-two\n+three\n");
+    var heads: u8[>..] = [];
+    assert(diff::format_patch_opts(sp, hu[..], names[..], marks[..], body[..], lspans[..], diff::file_headers_only_options(), heads) == diff::ERR_OK);
+    assert(heads == "--- a.txt\th1\n+++ b.txt\th2\n@@ -1,2 +1,2 @@\n one\n-two\n+three\n");
+    var none: u8[>..] = [];
+    assert(diff::format_patch_opts(sp, hu[..], names[..], marks[..], body[..], lspans[..], diff::omit_headers_options(), none) == diff::ERR_OK);
+    assert(none == "@@ -1,2 +1,2 @@\n one\n-two\n+three\n");
+    // The line of Index appears only with equal names.
+    var sp2: diff::SPatch = sp;
+    var hu2: diff::Hunk[>..] = [];
+    var n2: u8[>..] = [];
+    var m2: u8[>..] = [];
+    var b2: u8[>..] = [];
+    var l2: diff::Span[>..] = [];
+    assert(diff::structured_patch("f", "f", "one\ntwo\n", "one\nthree\n", "h1", "h2", o, sp2, hu2, n2, m2, b2, l2) == diff::ERR_OK);
+    var ix: u8[>..] = [];
+    var hopt = diff::default_header_options();
+    hopt.include_underline = false;
+    assert(diff::format_patch_opts(sp2, hu2[..], n2[..], m2[..], b2[..], l2[..], hopt, ix) == diff::ERR_OK);
+    assert(ix == "Index: f\n--- f\th1\n+++ f\th2\n@@ -1,2 +1,2 @@\n one\n-two\n+three\n");
+    // An empty header text writes no tab with skip_empty_header.
+    var sp3: diff::SPatch = sp;
+    var hu3: diff::Hunk[>..] = [];
+    var n3: u8[>..] = [];
+    var m3: u8[>..] = [];
+    var b3: u8[>..] = [];
+    var l3: diff::Span[>..] = [];
+    assert(diff::structured_patch("f", "g", "one\n", "two\n", "", "", o, sp3, hu3, n3, m3, b3, l3) == diff::ERR_OK);
+    var bare: u8[>..] = [];
+    var hb = diff::file_headers_only_options();
+    hb.skip_empty_header = true;
+    assert(diff::format_patch_opts(sp3, hu3[..], n3[..], m3[..], b3[..], l3[..], hb, bare) == diff::ERR_OK);
+    assert(bare == "--- f\n+++ g\n@@ -1,1 +1,1 @@\n-one\n+two\n");
+}
+
+fn test_diff_ratio() {
+    // The ratios of TextDiff in similar 2.7.0.
+    var o = diff::default_options();
+    let c1, r1 = diff::diff_ratio("a\nb\nc\n", "a\nX\nc\n", o);
+    assert(c1 == diff::ERR_OK);
+    assert(r1 > 0.6666 && r1 < 0.6667);
+    let c2, r2 = diff::diff_ratio("", "", o);
+    assert(c2 == diff::ERR_OK && r2 == 1.0);
+    let c3, r3 = diff::diff_ratio("a\n", "b\n", o);
+    assert(c3 == diff::ERR_OK && r3 == 0.0);
+}
+
 fn test_spatch() {
     // The bytes of jsdiff 8.0.4, pinned from a run of the library.
     var a1: u8[>..] = [];
@@ -2076,6 +2136,8 @@ fn main() {
 
     test_spatch();
     test_spatch_eof();
+    test_header_options();
+    test_diff_ratio();
     test_html();
     test_dated();
     test_line_ends();

@@ -153,25 +153,71 @@ fn sp_model_ok(sp: SPatch, hunks: const Hunk[:], names: const u8[:], marks: cons
     return true;
 }
 
+// HeaderOptions holds the parts of a patch header that the writer
+// writes. It is the headerOptions of jsdiff.
+struct HeaderOptions {
+    // The line of "Index:" appears. It appears only when the two names
+    // of the patch are equal.
+    include_index: bool,
+    // The line of "=" stands above the headers.
+    include_underline: bool,
+    // The lines of "---" and "+++" appear.
+    include_file_headers: bool,
+    // An empty header text writes no tab. It acts as the undefined
+    // header of jsdiff.
+    skip_empty_header: bool,
+}
+
+// default_header_options gives the headers of jsdiff INCLUDE_HEADERS.
+fn default_header_options() -> HeaderOptions {
+    return HeaderOptions { include_index: true, include_underline: true, include_file_headers: true, skip_empty_header: false };
+}
+
+// file_headers_only_options gives the headers of jsdiff
+// FILE_HEADERS_ONLY. The file headers appear, the other parts do not.
+fn file_headers_only_options() -> HeaderOptions {
+    return HeaderOptions { include_index: false, include_underline: false, include_file_headers: true, skip_empty_header: false };
+}
+
+// omit_headers_options gives the headers of jsdiff OMIT_HEADERS. Only
+// the hunks appear.
+fn omit_headers_options() -> HeaderOptions {
+    return HeaderOptions { include_index: false, include_underline: false, include_file_headers: false, skip_empty_header: false };
+}
+
 // patch_text writes the structured patch as patch text. The line of
 // "Index:" appears when the two names are equal, as jsdiff writes it.
 // Every header takes its tab. It gives a code.
 fn patch_text(sp: SPatch, hunks: const Hunk[:], names: const u8[:], marks: const u8[:],
               body: const u8[:], lspans: const Span[:], out: u8[>..]&) -> i64 {
+    return patch_text_opts(sp, hunks, names, marks, body, lspans, default_header_options(), out);
+}
+
+// patch_text_opts writes the structured patch as patch text. The rules
+// of the header name the parts of the header that appear. The line of
+// "Index:" appears when the two names are equal and the rule asks for
+// it. Every header takes its tab. It gives a code.
+fn patch_text_opts(sp: SPatch, hunks: const Hunk[:], names: const u8[:], marks: const u8[:],
+                   body: const u8[:], lspans: const Span[:], hopt: HeaderOptions,
+                   out: u8[>..]&) -> i64 {
     if !sp_model_ok(sp, hunks, names, marks, body, lspans, true) { return ERR_BAD_PATCH; }
-    if sp_eq(names, sp.old_name, names, sp.new_name) {
+    if hopt.include_index && sp_eq(names, sp.old_name, names, sp.new_name) {
         put_text(out, "Index: ");
         put_span(out, names, sp.old_name);
         out.push(10);
     }
-    for k in 67 { out.push('='); }
-    out.push(10);
-    put_text(out, "--- ");
-    put_span(out, names, sp.old_name);
-    put_header(out, names, sp.old_header);
-    put_text(out, "+++ ");
-    put_span(out, names, sp.new_name);
-    put_header(out, names, sp.new_header);
+    if hopt.include_underline {
+        for k in 67 { out.push('='); }
+        out.push(10);
+    }
+    if hopt.include_file_headers {
+        put_text(out, "--- ");
+        put_span(out, names, sp.old_name);
+        put_header(out, names, sp.old_header, hopt.skip_empty_header);
+        put_text(out, "+++ ");
+        put_span(out, names, sp.new_name);
+        put_header(out, names, sp.new_header, hopt.skip_empty_header);
+    }
     var hi = sp.first_hunk;
     while hi < sp.first_hunk + sp.hunks {
         let h = hunks[hi];
@@ -203,9 +249,11 @@ fn patch_text(sp: SPatch, hunks: const Hunk[:], names: const u8[:], marks: const
 
 // put_header appends the tab and the header of a file line. The tab
 // appears even when the header holds no text, as jsdiff writes it.
-fn put_header(out: u8[>..]&, names: const u8[:], s: Span) {
-    out.push(9);
-    put_span(out, names, s);
+fn put_header(out: u8[>..]&, names: const u8[:], s: Span, skip_empty: bool) {
+    if !(skip_empty && s.len == 0) {
+        out.push(9);
+        put_span(out, names, s);
+    }
     out.push(10);
 }
 
@@ -228,6 +276,15 @@ fn sp_eq(text: const u8[:], a: Span, btext: const u8[:], b: Span) -> bool {
 fn format_patch(sp: SPatch, hunks: const Hunk[:], names: const u8[:], marks: const u8[:],
                 body: const u8[:], lspans: const Span[:], out: u8[>..]&) -> i64 {
     return patch_text(sp, hunks, names, marks, body, lspans, out);
+}
+
+// format_patch_opts writes a structured patch as patch text with the
+// headers that the rules of the header name. It is the formatPatch of
+// jsdiff with its headerOptions.
+fn format_patch_opts(sp: SPatch, hunks: const Hunk[:], names: const u8[:], marks: const u8[:],
+                     body: const u8[:], lspans: const Span[:], hopt: HeaderOptions,
+                     out: u8[>..]&) -> i64 {
+    return patch_text_opts(sp, hunks, names, marks, body, lspans, hopt, out);
 }
 
 // create_patch builds the structured patch of one file and writes it

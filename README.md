@@ -9,7 +9,7 @@ It finds the blocks of equal lines and the words that match a word best. It comp
 ## Install
 
 ```goose
-import diff from "rekanalar/goose-diff@v1.0.0";
+import diff from "rekanalar/goose-diff@v1.1.0";
 ```
 
 The package depends on `goose-unicode`. A program declares the dependency in its root file too, because Goose reads the packages from the root file only:
@@ -72,6 +72,7 @@ The word bounds, the cluster bounds and the case fold of Unicode come from that 
 | `matcher_longest(a, b, o, alo, ahi, blo, bhi)` | Gives the longest block of equal lines in a range of the two texts. Gives a code and the block |
 | `matcher_grouped(a, b, o, n, ops, ends)` | Adds the opcodes of the matcher to `ops` and the ends of the hunks to `ends`. Gives a code |
 | `matcher_ratio(a, b, o)` | Gives the ratio of the two texts. Gives a code and the ratio |
+| `diff_ratio(a, b, o)` | Gives the ratio over the lines of the diff, as `TextDiff::ratio` of `similar`. Gives a code and the ratio |
 | `matcher_quick_ratio(a, b, o)` | Gives the quick ratio of the two texts. Gives a code and the ratio |
 | `matcher_real_quick_ratio(a, b, o)` | Gives the real quick ratio of the two texts. Gives a code and the ratio |
 | `unified_diff_dated(out, a, b, a_name, b_name, a_date, b_date, lineterm, o)` | The unified diff with a date after each name and the line terminator of the header lines. Gives a code and the minimality flag |
@@ -100,6 +101,9 @@ The word bounds, the cluster bounds and the case fold of Unicode come from that 
 | `structured_patch(a_name, b_name, a, b, a_header, b_header, o, sp, hunks, names, marks, body, lspans)` | Builds the structured patch of `a` against `b` into the flat buffers. Gives a code |
 | `patch_text(sp, hunks, names, marks, body, lspans, out)` | Writes the structured patch as patch text. The line of `Index:` appears when the two names are equal. Gives a code |
 | `format_patch(sp, hunks, names, marks, body, lspans, out)` | Writes a structured patch as patch text, as `patch_text` does. Gives a code |
+| `format_patch_opts(sp, hunks, names, marks, body, lspans, hopt, out)` | Writes a structured patch with the headers that `hopt` names. Gives a code |
+| `patch_text_opts(sp, hunks, names, marks, body, lspans, hopt, out)` | Does the same as `format_patch_opts` |
+| `default_header_options()`, `file_headers_only_options()`, `omit_headers_options()` | Give the `HeaderOptions` of `INCLUDE_HEADERS`, `FILE_HEADERS_ONLY` and `OMIT_HEADERS` in jsdiff. The fields are `include_index`, `include_underline`, `include_file_headers` and `skip_empty_header` |
 | `create_patch(name, a, b, a_header, b_header, o, sp, hunks, names, marks, body, lspans, out)` | Builds the patch of one file and writes it. Gives a code |
 | `patch_parse_structured(text, file, sp, hunks, names, marks, body, lspans)` | Reads one file of a patch into the structured model. Gives a code |
 | `patch_reverse(sp, hunks, names, marks, fsp, fhunks, fnames, fmarks)` | Fills the flipped patch. The flipped patch shares the body lines with the patch. Gives a code |
@@ -226,7 +230,7 @@ A call that fails leaves the buffer of the caller as it was.
 
 ```goose
 import std;
-import diff from "rekanalar/goose-diff@v1.0.0";
+import diff from "rekanalar/goose-diff@v1.1.0";
 
 fn main() {
     var out: u8[>..] = [];
@@ -287,6 +291,9 @@ Risks that stay: the package reads a patch and a text from the caller. It does n
 
 ## Limits
 
+- **Two ratios exist, and the references disagree.** `matcher_ratio` counts the blocks of the `difflib` matcher. `diff_ratio` counts the equal lines of the diff, as `similar` does. The two values can differ for the same texts. No standard fixes the choice, so the package offers both.
+- **Python `difflib` ends a last line in another way.** It writes no marker for a last line with no end. The package writes `\ No newline at end of file`, as GNU `diff`, jsdiff and `similar` do.
+- **An absent header needs a switch.** jsdiff writes no tab for an undefined header. It writes a tab for an empty one. The writers write the tab for both, unless `skip_empty_header` is true.
 - **The Unicode splits use the default rules.** They follow UAX 29 with no dictionary and no locale. A text in Chinese, Japanese, Thai, Lao, Khmer or Burmese splits where the default rules split it. The Node `Intl.Segmenter` may split these texts at the word of a dictionary. The Rust crate `unicode-segmentation` splits as the package does. The package has no list of abbreviations.
 - **`unicode_case` lowers each token alone.** A one-letter capital sigma stays `σ`, as in the Node library.
 - **The inline search uses the Patience search for the words.** The rule `algorithm` names the search of the lines. The words always use `ALG_PATIENCE`, as `similar` does.

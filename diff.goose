@@ -183,6 +183,26 @@ fn output_ops(a: const u8[:], b: const u8[:], o: Options, la: Span[>..]&, lb: Sp
     return ERR_OK, exact;
 }
 
+// diff_ratio gives the ratio of a against b over the lines of the diff
+// that the rule `algorithm` finds. The ratio is twice the count of the
+// equal lines over the count of all lines. It is the ratio of TextDiff
+// in the crate similar. The matcher_ratio of difflib counts the blocks
+// of its own matcher, so the two can differ.
+fn diff_ratio(a: const u8[:], b: const u8[:], o: Options) -> i64, f64 {
+    if !options_ok(o) { return ERR_BAD_OPTION, 0.0; }
+    if a.len > o.max_input || b.len > o.max_input { return ERR_TOO_LARGE, 0.0; }
+    var la: Span[>..] = [];
+    var lb: Span[>..] = [];
+    var ops: Op[>..] = [];
+    let code, exact = output_ops(a, b, o, la, lb, ops);
+    if code != ERR_OK { return code, 0.0; }
+    var matches: i64 = 0;
+    for p in ops { if p.tag == OP_EQUAL { matches = matches + p.a_hi - p.a_lo; } }
+    let total = la.len + lb.len;
+    if total == 0 { return ERR_OK, 1.0; }
+    return ERR_OK, 2.0 * matches / total;
+}
+
 // unified_diff appends the unified diff of a against b to `out`. The
 // names go in the two header lines. Equal texts give no output. It gives
 // a code and a flag. The flag is true when the diff is minimal. The rule
