@@ -1679,6 +1679,53 @@ fn test_html() {
     assert(nb.len == 1);
 }
 
+// test_dated pins the dates, the terminator and the junk rules of Python 3.14.
+fn test_dated() {
+    var dro = diff::default_options();
+    dro.algorithm = diff::ALG_RO;
+    dro.context = 1;
+    var dua: u8[>..] = [];
+    let duac, duae = diff::unified_diff_dated(dua, "one\ntwo\nthree\nfour\nfive\nsix\nseven\n", "one\n2\nthree\nfour\nfive\nsix\nseven!\n", "a.txt", "b.txt", "2024-01-01", "2024-01-02", "\r\n", dro);
+    assert(duac == diff::ERR_OK && duae);
+    assert(dua[..] == "--- a.txt\t2024-01-01\r\n+++ b.txt\t2024-01-02\r\n@@ -1,3 +1,3 @@\r\n one\n-two\n+2\n three\n@@ -6,2 +6,2 @@\r\n six\n-seven\n+seven!\n");
+    var dub: u8[>..] = [];
+    let dubc, dube = diff::unified_diff_dated(dub, "one\ntwo\nthree\nfour\nfive\nsix\nseven\n", "one\n2\nthree\nfour\nfive\nsix\nseven!\n", "a.txt", "b.txt", "", "now", "", dro);
+    assert(dubc == diff::ERR_OK && dube);
+    assert(dub[..] == "--- a.txt+++ b.txt\tnow@@ -1,3 +1,3 @@ one\n-two\n+2\n three\n@@ -6,2 +6,2 @@ six\n-seven\n+seven!\n");
+    var dca: u8[>..] = [];
+    let dcac, dcae = diff::context_diff_dated(dca, "one\ntwo\nthree\nfour\nfive\nsix\nseven\n", "one\n2\nthree\nfour\nfive\nsix\nseven!\n", "a.txt", "b.txt", "t1", "t2", "\r\n", dro);
+    assert(dcac == diff::ERR_OK && dcae);
+    assert(dca[..] == "*** a.txt\tt1\r\n--- b.txt\tt2\r\n***************\r\n*** 1,3 ****\r\n  one\n! two\n  three\n--- 1,3 ----\r\n  one\n! 2\n  three\n***************\r\n*** 6,7 ****\r\n  six\n! seven\n--- 6,7 ----\r\n  six\n! seven!\n");
+    var ndo = diff::default_options();
+    var ndd: u8[>..] = [];
+    assert(diff::ndiff("#\n\n#\na  b  c  d  e  f\nx y z w\n", "x y z w\nthe quick brown fox\n  # \na  b  c  d  e  f\n\n", ndo, ndd) == diff::ERR_OK);
+    assert(ndd[..] == "- #\n+ x y z w\n+ the quick brown fox\n+   # \n+ a  b  c  d  e  f\n  \n- #\n- a  b  c  d  e  f\n- x y z w\n");
+    ndo.junk = diff::JUNK_COMMENT;
+    var ndl: u8[>..] = [];
+    assert(diff::ndiff("#\n\n#\na  b  c  d  e  f\nx y z w\n", "x y z w\nthe quick brown fox\n  # \na  b  c  d  e  f\n\n", ndo, ndl) == diff::ERR_OK);
+    assert(ndl[..] == "- #\n- \n- #\n+ x y z w\n+ the quick brown fox\n+   # \n  a  b  c  d  e  f\n- x y z w\n+ \n");
+    assert(ndl[..] != ndd[..]);
+    ndo.junk = diff::JUNK_NONE;
+    var ndc: u8[>..] = [];
+    assert(diff::ndiff("a b c d e f\n", "   \na  b  c  d  e  f\n   \n", ndo, ndc) == diff::ERR_OK);
+    assert(ndc[..] == "+    \n- a b c d e f\n+ a  b  c  d  e  f\n?   +  +  +  + +\n+    \n");
+    ndo.char_junk = diff::CHARJUNK_NONE;
+    var ndn: u8[>..] = [];
+    assert(diff::ndiff("a b c d e f\n", "   \na  b  c  d  e  f\n   \n", ndo, ndn) == diff::ERR_OK);
+    assert(ndn[..] == "+    \n- a b c d e f\n+ a  b  c  d  e  f\n?  +   + +   + +\n+    \n");
+    assert(ndn[..] != ndc[..]);
+    ndo.char_junk = 7;
+    assert(diff::ndiff("a\n", "b\n", ndo, ndn) == diff::ERR_BAD_OPTION);
+    // A date with a line end or a terminator with other bytes is a fault.
+    var bad: u8[>..] = ['k'];
+    let bc1, be1 = diff::unified_diff_dated(bad, "a\n", "b\n", "x", "y", "d\n+++ forged", "", "\n", dro);
+    assert(bc1 == diff::ERR_BAD_NAME);
+    let bc2, be2 = diff::unified_diff_dated(bad, "a\n", "b\n", "x", "y", "", "", "\n+++ forged\n", dro);
+    assert(bc2 == diff::ERR_BAD_OPTION);
+    let bc3, be3 = diff::context_diff_dated(bad, "a\n", "b\n", "x", "y", "", "", "\n\n\n", dro);
+    assert(bc3 == diff::ERR_BAD_OPTION && bad.len == 1);
+}
+
 fn main() {
     test_basic();
     test_random();
@@ -1721,6 +1768,7 @@ fn main() {
     test_spatch();
     test_spatch_eof();
     test_html();
+    test_dated();
     test_ndiff_restore();
     test_ndiff_bounds();
     print("all diff tests pass\n");

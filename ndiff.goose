@@ -11,6 +11,11 @@ namespace diff;
 
 import std;
 
+// The rule of the junk characters of a delta: the blank and the tab, as
+// the function IS_CHARACTER_JUNK of Python takes them, or none.
+const CHARJUNK_BLANK: i64 = 0;
+const CHARJUNK_NONE: i64 = 1;
+
 // The lines that the search of a close pair looks at, on each side.
 const NDIFF_WINDOW: i64 = 10;
 
@@ -47,12 +52,13 @@ fn nd_code(text: const u8[:], s: Span) -> i64 {
 // nd_pair gives the ids of the code points of two lines, and the junk
 // table. The blank and the tab are junk.
 fn nd_pair(a: const u8[:], sa: const Span[:], b: const u8[:], sb: const Span[:],
-           ida: i32[>..]&, idb: i32[>..]&, junk: u8[>..]&) {
+           ida: i32[>..]&, idb: i32[>..]&, junk: u8[>..]&, char_junk: i64) {
     ida.resize(0, 0);
     idb.resize(0, 0);
     intern(a, sa, b, sb, ida, idb, Compare { fold: false, strip_cr: false });
     junk.resize(0, 0);
     junk.resize(ro_ids(ida[..], idb[..]), 0);
+    if char_junk == CHARJUNK_NONE { return; }
     for i in sa.len {
         if sa[i].len == 1 && (a[sa[i].at] == ' ' || a[sa[i].at] == 9) { junk[ida[i] as i64] = 1; }
     }
@@ -155,7 +161,7 @@ fn nd_cmp(text: const u8[:], s: Span, bare: bool) -> Span {
 // marks the characters that differ inside each pair.
 fn nd_replace(out: u8[>..]&, a: const u8[:], la: const Span[:], alo: i64, ahi: i64,
               b: const u8[:], lb: const Span[:], blo: i64, bhi: i64,
-              max_work: i64, work: i64&, bare: bool) -> i64 {
+              max_work: i64, work: i64&, bare: bool, char_junk: i64) -> i64 {
     let cutoff: f64 = 0.74999;
     var tok = default_token_options();
     tok.max_tokens = 1 << 40;
@@ -189,7 +195,7 @@ fn nd_replace(out: u8[>..]&, a: const u8[:], la: const Span[:], alo: i64, ahi: i
             let si = nd_cmp(a, la[i], bare);
             let ci = a[si.at..si.at + si.len];
             tok_chars(ci, tok, sa);
-            nd_pair(ci, sa[..], cj, sb[..], ida, idb, junk);
+            nd_pair(ci, sa[..], cj, sb[..], ida, idb, junk, char_junk);
             let code, r = nd_ratio(ida[..], idb[..], junk[..], best, max_work, work);
             if code != ERR_OK { return code; }
             if r > best {
@@ -209,7 +215,7 @@ fn nd_replace(out: u8[>..]&, a: const u8[:], la: const Span[:], alo: i64, ahi: i
             sb.resize(0, Span { at: 0, len: 0 });
             tok_chars(ca, tok, sa);
             tok_chars(cb, tok, sb);
-            nd_pair(ca, sa[..], cb, sb[..], ida, idb, junk);
+            nd_pair(ca, sa[..], cb, sb[..], ida, idb, junk, char_junk);
             var ops: Op[>..] = [];
             let code = ro_opcodes(ida[..], idb[..], junk[..], true, max_work, work, ops);
             if code != ERR_OK { return code; }
@@ -264,6 +270,7 @@ fn ndiff_into(a: const u8[:], b: const u8[:], o: Options, bare: bool, out: u8[>.
     if pcode != ERR_OK { return pcode; }
     var junk: u8[>..] = [];
     junk.resize(ro_ids(ida[..], idb[..]), 0);
+    ro_junk_lines(a, la[..], ida[..], b, lb[..], idb[..], o.junk, junk);
     var work: i64 = 0;
     var ops: Op[>..] = [];
     let ocode = ro_opcodes(ida[..], idb[..], junk[..], o.autojunk, o.max_work, work, ops);
@@ -278,7 +285,7 @@ fn ndiff_into(a: const u8[:], b: const u8[:], o: Options, bare: bool, out: u8[>.
             nd_dump(buf, '+', b, lb[..], op.b_lo, op.b_hi);
         } else {
             let code = nd_replace(buf, a, la[..], op.a_lo, op.a_hi, b, lb[..], op.b_lo, op.b_hi,
-                                  o.max_work, work, bare);
+                                  o.max_work, work, bare, o.char_junk);
             if code != ERR_OK { return code; }
         }
     }

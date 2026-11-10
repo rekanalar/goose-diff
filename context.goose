@@ -19,7 +19,8 @@ fn put_context_range(out: u8[>..]&, start: i64, stop: i64) {
 
 // write_context appends the context diff of the opcodes to the buffer.
 fn write_context(out: u8[>..]&, a: const u8[:], la: const Span[:], b: const u8[:], lb: const Span[:],
-                 ops: const Op[:], a_name: const u8[:], b_name: const u8[:], context: i64) {
+                 ops: const Op[:], a_name: const u8[:], b_name: const u8[:], a_date: const u8[:],
+                 b_date: const u8[:], lineterm: const u8[:], context: i64) {
     var groups: Op[>..] = [];
     var ends: i64[>..] = [];
     group_ops(ops, context, groups, ends);
@@ -27,17 +28,16 @@ fn write_context(out: u8[>..]&, a: const u8[:], la: const Span[:], b: const u8[:
     var first = true;
     for e in ends {
         if first {
-            put_text(out, "*** ");
-            put_text(out, a_name);
-            out.push(10);
-            put_text(out, "--- ");
-            put_text(out, b_name);
-            out.push(10);
+            put_header_line(out, "*** ", a_name, a_date, lineterm);
+            put_header_line(out, "--- ", b_name, b_date, lineterm);
             first = false;
         }
-        put_text(out, "***************\n*** ");
+        put_text(out, "***************");
+        put_text(out, lineterm);
+        put_text(out, "*** ");
         put_context_range(out, groups[from].a_lo, groups[e - 1].a_hi);
-        put_text(out, " ****\n");
+        put_text(out, " ****");
+        put_text(out, lineterm);
         var old = false;
         var new = false;
         for i in from..e {
@@ -59,7 +59,8 @@ fn write_context(out: u8[>..]&, a: const u8[:], la: const Span[:], b: const u8[:
         }
         put_text(out, "--- ");
         put_context_range(out, groups[from].b_lo, groups[e - 1].b_hi);
-        put_text(out, " ----\n");
+        put_text(out, " ----");
+        put_text(out, lineterm);
         if new {
             for i in from..e {
                 let g = groups[i];
@@ -83,14 +84,23 @@ fn write_context(out: u8[>..]&, a: const u8[:], la: const Span[:], b: const u8[:
 // `algorithm` names the search.
 fn context_diff(out: u8[>..]&, a: const u8[:], b: const u8[:], a_name: const u8[:], b_name: const u8[:],
                 o: Options) -> i64, bool {
-    if !options_ok(o) { return ERR_BAD_OPTION, false; }
+    return context_diff_dated(out, a, b, a_name, b_name, "", "", "\n", o);
+}
+
+// context_diff_dated is context_diff with the dates of the two files and
+// the line terminator, as the `fromfiledate`, `tofiledate` and `lineterm`
+// of Python. The rules of `unified_diff_dated` hold.
+fn context_diff_dated(out: u8[>..]&, a: const u8[:], b: const u8[:], a_name: const u8[:],
+                      b_name: const u8[:], a_date: const u8[:], b_date: const u8[:],
+                      lineterm: const u8[:], o: Options) -> i64, bool {
+    if !options_ok(o) || !lineterm_ok(lineterm) { return ERR_BAD_OPTION, false; }
     if a.len > o.max_input || b.len > o.max_input { return ERR_TOO_LARGE, false; }
-    if !name_ok(a_name) || !name_ok(b_name) { return ERR_BAD_NAME, false; }
+    if !name_ok(a_name) || !name_ok(b_name) || !name_ok(a_date) || !name_ok(b_date) { return ERR_BAD_NAME, false; }
     var la: Span[>..] = [];
     var lb: Span[>..] = [];
     var ops: Op[>..] = [];
     let code, exact = output_ops(a, b, o, la, lb, ops);
     if code != ERR_OK { return code, false; }
-    write_context(out, a, la[..], b, lb[..], ops[..], a_name, b_name, o.context);
+    write_context(out, a, la[..], b, lb[..], ops[..], a_name, b_name, a_date, b_date, lineterm, o.context);
     return ERR_OK, exact;
 }

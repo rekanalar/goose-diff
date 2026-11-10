@@ -23,4 +23,12 @@ fn main() {
     assert(c2 == diff::ERR_OK && x2);
     print("--- the unified diff ---\n");
     print(out[..]);
+
+    // The same diff with a date after each name.
+    var dated: u8[>..] = [];
+    let c3, x3 = diff::unified_diff_dated(dated, a, b, "old.txt", "new.txt", "2026-11-09 10:00",
+                                          "2026-11-10 10:00", "\n", diff::default_options());
+    assert(c3 == diff::ERR_OK && x3);
+    print("--- the dated header ---\n");
+    print(dated[..]);
 }

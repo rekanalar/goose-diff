@@ -60,6 +60,27 @@ fn put_line(out: u8[>..]&, marker: u8, text: const u8[:], s: Span) {
     }
 }
 
+// put_header_line appends a header line: the marker, the name, a tab and
+// the date when the date is not empty, and the line terminator.
+fn put_header_line(out: u8[>..]&, marker: const u8[:], name: const u8[:], date: const u8[:],
+                   lineterm: const u8[:]) {
+    put_text(out, marker);
+    put_text(out, name);
+    if date.len > 0 {
+        out.push(9);
+        put_text(out, date);
+    }
+    put_text(out, lineterm);
+}
+
+// lineterm_ok tells whether a line terminator holds only line end bytes.
+// A terminator with other bytes could forge a line of the diff.
+fn lineterm_ok(s: const u8[:]) -> bool {
+    if s.len > 2 { return false; }
+    for c in s { if c != 10 && c != 13 { return false; } }
+    return true;
+}
+
 // name_ok tells whether a file name can stand in a header: it holds no
 // line end.
 fn name_ok(s: const u8[:]) -> bool {
@@ -124,7 +145,8 @@ fn group_ops(ops: const Op[:], n: i64, out: Op[>..]&, ends: i64[>..]&) {
 
 // write_unified appends the unified diff of the opcodes to the buffer.
 fn write_unified(out: u8[>..]&, a: const u8[:], la: const Span[:], b: const u8[:], lb: const Span[:],
-                 ops: const Op[:], a_name: const u8[:], b_name: const u8[:], context: i64) {
+                 ops: const Op[:], a_name: const u8[:], b_name: const u8[:], a_date: const u8[:],
+                 b_date: const u8[:], lineterm: const u8[:], context: i64) {
     var groups: Op[>..] = [];
     var ends: i64[>..] = [];
     group_ops(ops, context, groups, ends);
@@ -132,19 +154,16 @@ fn write_unified(out: u8[>..]&, a: const u8[:], la: const Span[:], b: const u8[:
     var first = true;
     for e in ends {
         if first {
-            put_text(out, "--- ");
-            put_text(out, a_name);
-            out.push(10);
-            put_text(out, "+++ ");
-            put_text(out, b_name);
-            out.push(10);
+            put_header_line(out, "--- ", a_name, a_date, lineterm);
+            put_header_line(out, "+++ ", b_name, b_date, lineterm);
             first = false;
         }
         put_text(out, "@@ -");
         put_range(out, groups[from].a_lo, groups[e - 1].a_hi);
         put_text(out, " +");
         put_range(out, groups[from].b_lo, groups[e - 1].b_hi);
-        put_text(out, " @@\n");
+        put_text(out, " @@");
+        put_text(out, lineterm);
         var i = from;
         while i < e {
             let o = groups[i];

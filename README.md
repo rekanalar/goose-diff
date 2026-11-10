@@ -9,7 +9,7 @@ It finds the blocks of equal lines and the words that match a word best. It comp
 ## Install
 
 ```goose
-import diff from "rekanalar/goose-diff@v0.10.0";
+import diff from "rekanalar/goose-diff@v0.11.0";
 ```
 
 The package uses the standard library only. It has no other dependency.
@@ -44,6 +44,7 @@ The package uses the standard library only. It has no other dependency.
 - **Four searches.** The rule `algorithm` takes `ALG_MYERS`, `ALG_RO` (the matcher of `difflib`), `ALG_PATIENCE` and `ALG_LCS`. The Patience search matches the Rust crate `similar` step by step.
 - **The CSS and JSON searches.** `diff_css` compares the tokens of a style sheet. `diff_json` writes both JSON texts in one canonical form with sorted keys, then compares the lines. A comma at the end of a line does not count.
 - **The context format.** `context_diff` writes the context diff of `difflib`. The hunks follow the rule `context`.
+- **The dates and the line terminator.** `unified_diff_dated` and `context_diff_dated` take a date for each file. They take the line terminator of the header lines. Python names these `fromfiledate`, `tofiledate` and `lineterm`.
 - **The delta with hints.** `ndiff` writes the delta of `difflib`. A pair of close lines gets a line of hints that marks the changed characters. `ndiff_restore` takes one of the two texts back out of a delta.
 - **The side by side HTML diff.** `html_table` and `html_file` write the table and the page of `HtmlDiff`. The table holds the line numbers and the links to the changes. It marks the changes inside a line. It has a context form and wraps long lines. The bytes follow Python 3.14.
 - **The close words.** The package finds the words that match a word best. It compares the words by their characters.
@@ -66,6 +67,8 @@ The package uses the standard library only. It has no other dependency.
 | `matcher_ratio(a, b, o)` | Gives the ratio of the two texts. Gives a code and the ratio |
 | `matcher_quick_ratio(a, b, o)` | Gives the quick ratio of the two texts. Gives a code and the ratio |
 | `matcher_real_quick_ratio(a, b, o)` | Gives the real quick ratio of the two texts. Gives a code and the ratio |
+| `unified_diff_dated(out, a, b, a_name, b_name, a_date, b_date, lineterm, o)` | The unified diff with a date after each name and the line terminator of the header lines. Gives a code and the minimality flag |
+| `context_diff_dated(out, a, b, a_name, b_name, a_date, b_date, lineterm, o)` | The context diff with the same dates and terminator. Gives a code and the minimality flag |
 | `context_diff(out, a, b, a_name, b_name, o)` | Adds the context diff of `a` against `b` to `out`. Gives a code and the minimality flag |
 | `diff_css(a, b, o, changes)` | Adds the changes of the CSS tokens of `a` against `b` to `changes`. Gives a code and the minimality flag |
 | `json_canonical(text, o, out)` | Adds the canonical form of a JSON text to `out`. Sorted keys, two blanks of indent, the numbers of JavaScript. Gives a code |
@@ -138,6 +141,7 @@ A part that stays comes from the second text, as the Node library gives it.
 | `max_input` | The most bytes of one input | 16777216 |
 | `algorithm` | The search of the diff: `ALG_MYERS` or `ALG_RO` | `ALG_MYERS` |
 | `junk` | The junk rule of the matcher: `JUNK_NONE`, `JUNK_BLANK` or `JUNK_COMMENT` | `JUNK_NONE` |
+| `char_junk` | The junk characters of `ndiff` and of the HTML table: `CHARJUNK_BLANK` (the blank and the tab) or `CHARJUNK_NONE` | `CHARJUNK_BLANK` |
 | `autojunk` | The popular rule of the matcher. It drops a line that appears often in the second text | true |
 | `max_work` | The most compares that the matcher spends. It goes from 0 to 500000000 | 50000000 |
 | `strip_trailing_cr` | The carriage return that stands before a line feed does not matter | false |
@@ -202,7 +206,7 @@ A call that fails leaves the buffer of the caller as it was.
 
 ```goose
 import std;
-import diff from "rekanalar/goose-diff@v0.10.0";
+import diff from "rekanalar/goose-diff@v0.11.0";
 
 fn main() {
     var out: u8[>..] = [];
@@ -218,6 +222,7 @@ fn main() {
 - **The Patience search spends from a budget.** It counts the rounds and the compares of its Myers searches. At `max_work` the range that is left becomes one replace. The diff stays valid, but not minimal. The call says so with its flag.
 - **The LCS table has a cap.** The table holds at most 16777216 cells, which is 64 MB. A pair of texts that needs more gives `ERR_TOO_MUCH_WORK`. So does a table past `max_work`. The Rust crate holds the table in a map with no cap. Memory grows with the product of the two lengths.
 - **The Patience search maps the ids onto a dense range.** It gives every distinct id a place in a map. The map holds one slot per distinct id. A caller may pass ids of any value, even a negative one. No id can reach past the arrays of the counts.
+- **The dates and the terminator are checked.** A date with a line end gives `ERR_BAD_NAME`. The line terminator may hold the bytes 10 and 13 only, two at most. Python takes any text, so a terminator could forge a line of a diff.
 - **The HTML text is escaped.** The table escapes `&`, `<` and `>` in every line. It escapes the two descriptions too, and the quote as well. Python writes the two descriptions as they are, so a name with markup injects HTML.
 - **The marks of the table stay out of the text.** Python uses the bytes 0 and 1 as inner marks. A text with such a byte breaks its markup. The package gives `ERR_BAD_TEXT` for a text or a description with one.
 - **The page charset is checked.** It may hold letters, digits and `-_.:` only. Python writes the charset into the page as it is.
@@ -273,15 +278,14 @@ Risks that stay: the package reads a patch and a text from the caller. It does n
 - **The JSON search needs memory for every value.** A value costs about 80 bytes. A 16 MiB document of small values may take over a gigabyte. Lower `max_input` to bound it.
 - **The replacer of the Node library is out.** The options `stringifyReplacer` and `undefinedReplacement` have no meaning for a JSON text.
 - **Bytes that are no UTF-8 pass through.** The Node library works on UTF-16 strings and cannot hold such bytes.
-- **The context diff holds no time stamp.** `difflib` takes a date for each file. The package writes only the names. Put the date in the name when you need one.
 - **The context diff marks a line without a line end.** `difflib` writes the line as it is. The package adds a line end and the marker line of GNU `diff`.
 - **The hints count code points.** A mark stands under one code point, as in Python. A broken byte counts as one code point. A terminal may show a wide character in two columns, so the marks may not line up.
 - **A last line without a line end gets one.** The delta holds that line with a line end. `ndiff_restore` gives it back with a line end. The Python library keeps the line as it is.
-- **The delta takes no junk function.** The search of the lines follows the rules `autojunk` and `strip_trailing_cr` of the call. The search inside a line treats the blank and the tab as junk, as Python does. Python lets the caller change both rules.
+- **The delta takes junk rules, not junk functions.** The line search follows the rule `junk`. The mode `JUNK_COMMENT` is `IS_LINE_JUNK` of Python. The character search follows `char_junk`, and `CHARJUNK_BLANK` is `IS_CHARACTER_JUNK`. Python also takes any function, as `linejunk` and `charjunk`. Goose holds no function value.
 - **The diff works on lines.** The call `diff_lines` compares whole lines. A change inside a line shows the whole line on each side. The token searches show the change inside the line.
 - **The HTML page is UTF-8.** Python encodes the page into the charset. The package names the charset and writes UTF-8.
 - **The anchor prefix is a rule.** Python counts the tables of a page with a global counter. The package takes the number in the rule `prefix`. Give each table of a page its own number.
-- **The table takes no junk function.** Python passes `linejunk` and `charjunk` to `ndiff`. The package uses the rules of `ndiff`: no line junk, and the blank and the tab as character junk.
+- **The table follows the junk rules of `ndiff`.** It takes no junk function, for the reason that `ndiff` takes none.
 - **A line end ends a line.** The table splits a text at the line feed. A carriage return stays in the line and resets the column of the tab stops.
 - **A large fuzz apply takes time.** The budget is 50 million compares. A hunk that matches nowhere searches every place of a large text. Lower `max_work` and `max_shift` for a patch from a network.
 - **The word searches hold the white space twice.** The Node library gives the white space between two words to both. A change there holds it twice.
