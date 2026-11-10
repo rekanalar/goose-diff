@@ -1327,6 +1327,26 @@ fn test_spatch_eof() {
 }
 
 
+fn apply_one(src: const u8[:], p: const u8[:], want: const u8[:]) -> bool {
+    var files: diff::FilePatch[>..] = [];
+    var hunks: diff::Hunk[>..] = [];
+    var body: diff::Span[>..] = [];
+    if diff::patch_parse(p, files, hunks, body) != diff::ERR_OK { return false; }
+    var out: u8[>..] = [];
+    if diff::patch_apply(src, p, files[..], hunks[..], body[..], 0, diff::default_apply_options(), out) != diff::ERR_OK { return false; }
+    return out == want;
+}
+
+fn test_apply_create_remove() {
+    // The results of applyPatch in jsdiff 8.0.4 for a patch that adds a
+    // file and for a patch that removes one.
+    let add = "--- /dev/null\n+++ b.txt\n@@ -0,0 +1,2 @@\n+x\n+y\n";
+    let del = "--- a.txt\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-x\n-y\n";
+    assert(apply_one("", add, "x\ny\n"));
+    assert(apply_one("x\ny\n", del, ""));
+    assert(apply_one("zzz\n", add, "x\ny\nzzz\n"));
+}
+
 fn test_header_options() {
     // The bytes of formatPatch in jsdiff 8.0.4 for each header option.
     var sp: diff::SPatch = diff::SPatch { old_name: diff::Span { at: 0, len: 0 }, new_name: diff::Span { at: 0, len: 0 }, old_header: diff::Span { at: 0, len: 0 }, new_header: diff::Span { at: 0, len: 0 }, first_hunk: 0, hunks: 0 };
@@ -2137,6 +2157,7 @@ fn main() {
     test_spatch();
     test_spatch_eof();
     test_header_options();
+    test_apply_create_remove();
     test_diff_ratio();
     test_html();
     test_dated();
