@@ -1,11 +1,17 @@
-// The helpers that the tests of more than one group share.
-namespace common;
+// The helpers of the tests of the package.
+namespace diff_checks;
 
 import std;
 import diff from "..";
 import unicode from "rekanalar/goose-unicode@v0.3.0";
 
 var seed: u64 = 12345;
+
+// ops_text writes the ops as the Rust crate similar names them.
+recursive fn put_n(out: u8[>..]&, v: i64) {
+    if v >= 10 { put_n(out, v / 10); }
+    out.push('0' + (v % 10) as! u8);
+}
 
 fn rnd(n: i64) -> i64 {
     seed = seed * 6364136223846793005 + 1442695040888963407;
@@ -130,12 +136,6 @@ fn json_form(text: const u8[:], out: u8[>..]&) -> i64 {
 // ids_of gives the ids of a list of small numbers.
 fn ids_of(v: const i32[:], out: i32[>..]&) {
     for x in v { out.push(x); }
-}
-
-// ops_text writes the ops as the Rust crate similar names them.
-recursive fn put_n(out: u8[>..]&, v: i64) {
-    if v >= 10 { put_n(out, v / 10); }
-    out.push('0' + (v % 10) as! u8);
 }
 
 fn ops_text(ops: const diff::Op[:], out: u8[>..]&) {

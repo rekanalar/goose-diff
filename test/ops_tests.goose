@@ -4,7 +4,7 @@ namespace ops_tests;
 import std;
 import diff from "..";
 import unicode from "rekanalar/goose-unicode@v0.3.0";
-import common;
+import diff_checks;
 
 fn test_basic() {
     var ops: diff::Op[>..] = [];
@@ -29,13 +29,13 @@ fn test_random() {
     for round in 300 {
         var a: u8[>..] = [];
         var b: u8[>..] = [];
-        common::make_text(a, common::rnd(40), 1 + common::rnd(8));
-        common::make_text(b, common::rnd(40), 1 + common::rnd(8));
+        diff_checks::make_text(a, diff_checks::rnd(40), 1 + diff_checks::rnd(8));
+        diff_checks::make_text(b, diff_checks::rnd(40), 1 + diff_checks::rnd(8));
         var ops: diff::Op[>..] = [];
         let code, exact = diff::diff_lines(a[..], b[..], diff::default_options(), ops);
         assert(code == diff::ERR_OK && exact);
-        let equal = common::check_ops(a[..], b[..], ops[..]);
-        assert(equal == common::lcs_len(a[..], b[..]));
+        let equal = diff_checks::check_ops(a[..], b[..], ops[..]);
+        assert(equal == diff_checks::lcs_len(a[..], b[..]));
     }
 }
 
@@ -48,7 +48,7 @@ fn test_bounds() {
     var ops: diff::Op[>..] = [];
     let code, exact = diff::diff_lines(a[..], b[..], o, ops);
     assert(code == diff::ERR_OK && !exact);
-    common::check_ops(a[..], b[..], ops[..]);
+    diff_checks::check_ops(a[..], b[..], ops[..]);
     o.max_input = 100;
     var keep: diff::Op[>..] = [];
     let c2, x2 = diff::diff_lines(a[..], b[..], o, keep);

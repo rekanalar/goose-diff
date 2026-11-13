@@ -4,7 +4,7 @@ namespace token_tests;
 import std;
 import diff from "..";
 import unicode from "rekanalar/goose-unicode@v0.3.0";
-import common;
+import diff_checks;
 
 fn test_token_chars() {
     // The changes of the character search.
@@ -12,28 +12,28 @@ fn test_token_chars() {
     let o = diff::default_token_options();
     assert(diff::diff_chars("hello world"[..], "hello there"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 6);
-    assert(common::check_change(changes[0], 0, 6, 6, 1, false, false));
-    assert(common::check_change(changes[1], 6, 2, 2, 0, false, true));
-    assert(common::check_change(changes[2], 6, 3, 3, 1, true, false));
-    assert(common::check_change(changes[3], 9, 1, 1, 1, false, false));
-    assert(common::check_change(changes[4], 9, 2, 2, 0, false, true));
-    assert(common::check_change(changes[5], 10, 1, 1, 1, true, false));
+    assert(diff_checks::check_change(changes[0], 0, 6, 6, 1, false, false));
+    assert(diff_checks::check_change(changes[1], 6, 2, 2, 0, false, true));
+    assert(diff_checks::check_change(changes[2], 6, 3, 3, 1, true, false));
+    assert(diff_checks::check_change(changes[3], 9, 1, 1, 1, false, false));
+    assert(diff_checks::check_change(changes[4], 9, 2, 2, 0, false, true));
+    assert(diff_checks::check_change(changes[5], 10, 1, 1, 1, true, false));
     // The same text gives one change that stays.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     assert(diff::diff_chars("abc"[..], "abc"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 1);
-    assert(common::check_change(changes[0], 0, 3, 3, 1, false, false));
+    assert(diff_checks::check_change(changes[0], 0, 3, 3, 1, false, false));
     // Two texts with no character in common.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     assert(diff::diff_chars("xy"[..], "ab"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 2);
-    assert(common::check_change(changes[0], 0, 2, 2, 0, false, true));
-    assert(common::check_change(changes[1], 0, 2, 2, 1, true, false));
+    assert(diff_checks::check_change(changes[0], 0, 2, 2, 0, false, true));
+    assert(diff_checks::check_change(changes[1], 0, 2, 2, 1, true, false));
     // An empty text gives no change.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     assert(diff::diff_chars(""[..], "abc"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 1);
-    assert(common::check_change(changes[0], 0, 3, 3, 1, true, false));
+    assert(diff_checks::check_change(changes[0], 0, 3, 3, 1, true, false));
 }
 
 fn test_token_trimmed() {
@@ -43,18 +43,18 @@ fn test_token_trimmed() {
     let o = diff::default_token_options();
     assert(diff::diff_lines_trimmed("  a \n b  \n"[..], "  a \n b  \n"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 1);
-    assert(common::check_change(changes[0], 0, 10, 2, 1, false, false));
+    assert(diff_checks::check_change(changes[0], 0, 10, 2, 1, false, false));
     // The white space at the ends of a line does not matter.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     assert(diff::diff_lines_trimmed("one\n"[..], "two\nthree\n"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 2);
-    assert(common::check_change(changes[0], 0, 4, 1, 0, false, true));
-    assert(common::check_change(changes[1], 0, 10, 2, 1, true, false));
+    assert(diff_checks::check_change(changes[0], 0, 4, 1, 0, false, true));
+    assert(diff_checks::check_change(changes[1], 0, 10, 2, 1, true, false));
     // The lines differ only in their white space.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     assert(diff::diff_lines_trimmed("  a \n"[..], "a\n"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 1);
-    assert(common::check_change(changes[0], 0, 2, 1, 1, false, false));
+    assert(diff_checks::check_change(changes[0], 0, 2, 1, 1, false, false));
 }
 
 fn test_token_sentences() {
@@ -63,15 +63,15 @@ fn test_token_sentences() {
     let o = diff::default_token_options();
     assert(diff::diff_sentences("One. Two! Three? Four."[..], "One. Two! Three? Five."[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 3);
-    assert(common::check_change(changes[0], 0, 17, 6, 1, false, false));
-    assert(common::check_change(changes[1], 17, 5, 1, 0, false, true));
-    assert(common::check_change(changes[2], 17, 5, 1, 1, true, false));
+    assert(diff_checks::check_change(changes[0], 0, 17, 6, 1, false, false));
+    assert(diff_checks::check_change(changes[1], 17, 5, 1, 0, false, true));
+    assert(diff_checks::check_change(changes[2], 17, 5, 1, 1, true, false));
     // A text of one sentence gives one change.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     assert(diff::diff_sentences("Hello world"[..], "Hello there"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 2);
-    assert(common::check_change(changes[0], 0, 11, 1, 0, false, true));
-    assert(common::check_change(changes[1], 0, 11, 1, 1, true, false));
+    assert(diff_checks::check_change(changes[0], 0, 11, 1, 0, false, true));
+    assert(diff_checks::check_change(changes[1], 0, 11, 1, 1, true, false));
 }
 
 fn test_token_arrays() {
@@ -86,23 +86,23 @@ fn test_token_arrays() {
     tb.push(diff::Span { at: 1, len: 1 });
     assert(diff::diff_arrays("ab"[..], "xy"[..], ta[..], tb[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 2);
-    assert(common::check_change(changes[0], 0, 2, 2, 0, false, true));
-    assert(common::check_change(changes[1], 0, 2, 2, 1, true, false));
+    assert(diff_checks::check_change(changes[0], 0, 2, 2, 0, false, true));
+    assert(diff_checks::check_change(changes[1], 0, 2, 2, 1, true, false));
     // One token on each side.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     ta.resize(0, diff::Span { at: 0, len: 0 });
     tb.resize(0, diff::Span { at: 0, len: 0 });
     ta.push(diff::Span { at: 0, len: 1 });
     tb.push(diff::Span { at: 0, len: 1 });
     assert(diff::diff_arrays("a"[..], "b"[..], ta[..], tb[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 2);
-    assert(common::check_change(changes[0], 0, 1, 1, 0, false, true));
-    assert(common::check_change(changes[1], 0, 1, 1, 1, true, false));
+    assert(diff_checks::check_change(changes[0], 0, 1, 1, 0, false, true));
+    assert(diff_checks::check_change(changes[1], 0, 1, 1, 1, true, false));
     // The same token on each side gives one change that stays.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     assert(diff::diff_arrays("a"[..], "a"[..], ta[..], tb[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 1);
-    assert(common::check_change(changes[0], 0, 1, 1, 1, false, false));
+    assert(diff_checks::check_change(changes[0], 0, 1, 1, 1, false, false));
 }
 
 fn test_token_switches() {
@@ -112,48 +112,48 @@ fn test_token_switches() {
     oc.ignore_case = true;
     assert(diff::diff_chars("Hello"[..], "hello"[..], oc, changes) == diff::ERR_OK);
     assert(changes.len == 1);
-    assert(common::check_change(changes[0], 0, 5, 5, 1, false, false));
-    common::clear_changes(changes);
+    assert(diff_checks::check_change(changes[0], 0, 5, 5, 1, false, false));
+    diff_checks::clear_changes(changes);
     let o = diff::default_token_options();
     assert(diff::diff_chars("Hello"[..], "hello"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 3);
-    assert(common::check_change(changes[0], 0, 1, 1, 0, false, true));
-    assert(common::check_change(changes[1], 0, 1, 1, 1, true, false));
-    assert(common::check_change(changes[2], 1, 4, 4, 1, false, false));
+    assert(diff_checks::check_change(changes[0], 0, 1, 1, 0, false, true));
+    assert(diff_checks::check_change(changes[1], 0, 1, 1, 1, true, false));
+    assert(diff_checks::check_change(changes[2], 1, 4, 4, 1, false, false));
     // The white space switch. It cuts the white space at the ends of a
     // token.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     var ow = diff::default_token_options();
     ow.ignore_whitespace = true;
     assert(diff::diff_chars("a "[..], "a"[..], ow, changes) == diff::ERR_OK);
     assert(changes.len == 2);
-    assert(common::check_change(changes[0], 0, 1, 1, 1, false, false));
-    assert(common::check_change(changes[1], 1, 1, 1, 0, false, true));
+    assert(diff_checks::check_change(changes[0], 0, 1, 1, 1, false, false));
+    assert(diff_checks::check_change(changes[1], 1, 1, 1, 0, false, true));
     // The carriage return switch. It drops the carriage return that
     // stands before a line feed.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     var ocr = diff::default_token_options();
     ocr.strip_trailing_cr = true;
     assert(diff::diff_chars("a\r\n"[..], "a\n"[..], ocr, changes) == diff::ERR_OK);
     assert(changes.len == 1);
-    assert(common::check_change(changes[0], 0, 2, 2, 1, false, false));
-    common::clear_changes(changes);
+    assert(diff_checks::check_change(changes[0], 0, 2, 2, 1, false, false));
+    diff_checks::clear_changes(changes);
     assert(diff::diff_chars("a\r\n"[..], "a\n"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 3);
-    assert(common::check_change(changes[0], 0, 1, 1, 1, false, false));
-    assert(common::check_change(changes[1], 1, 1, 1, 0, false, true));
-    assert(common::check_change(changes[2], 1, 1, 1, 1, false, false));
+    assert(diff_checks::check_change(changes[0], 0, 1, 1, 1, false, false));
+    assert(diff_checks::check_change(changes[1], 1, 1, 1, 0, false, true));
+    assert(diff_checks::check_change(changes[2], 1, 1, 1, 1, false, false));
     // The line end switch. It gives the line end a token of its own.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     var onl = diff::default_token_options();
     onl.newline_is_token = true;
     assert(diff::diff_lines_trimmed("a\nb"[..], "a\nc"[..], onl, changes) == diff::ERR_OK);
     assert(changes.len == 3);
-    assert(common::check_change(changes[0], 0, 2, 2, 1, false, false));
-    assert(common::check_change(changes[1], 2, 1, 1, 0, false, true));
-    assert(common::check_change(changes[2], 2, 1, 1, 1, true, false));
+    assert(diff_checks::check_change(changes[0], 0, 2, 2, 1, false, false));
+    assert(diff_checks::check_change(changes[1], 2, 1, 1, 0, false, true));
+    assert(diff_checks::check_change(changes[2], 2, 1, 1, 1, true, false));
     // The carriage return switch of the line search.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     var ol = diff::default_options();
     ol.strip_trailing_cr = true;
     var ops: diff::Op[>..] = [];
@@ -174,9 +174,9 @@ fn test_token_broken() {
     let o = diff::default_token_options();
     assert(diff::diff_chars("a\x80b"[..], "a\x80c"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 3);
-    assert(common::check_change(changes[0], 0, 2, 2, 1, false, false));
-    assert(common::check_change(changes[1], 2, 1, 1, 0, false, true));
-    assert(common::check_change(changes[2], 2, 1, 1, 1, true, false));
+    assert(diff_checks::check_change(changes[0], 0, 2, 2, 1, false, false));
+    assert(diff_checks::check_change(changes[1], 2, 1, 1, 0, false, true));
+    assert(diff_checks::check_change(changes[2], 2, 1, 1, 1, true, false));
 }
 
 fn test_token_bounds() {
@@ -252,36 +252,36 @@ fn test_token_words() {
     let o = diff::default_token_options();
     assert(diff::diff_words("hello world"[..], "hello there"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 3);
-    assert(common::check_change(changes[0], 0, 6, 1, 1, false, false));
-    assert(common::check_change(changes[1], 6, 5, 1, 0, false, true));
-    assert(common::check_change(changes[2], 6, 5, 1, 1, true, false));
+    assert(diff_checks::check_change(changes[0], 0, 6, 1, 1, false, false));
+    assert(diff_checks::check_change(changes[1], 6, 5, 1, 0, false, true));
+    assert(diff_checks::check_change(changes[2], 6, 5, 1, 1, true, false));
     // A word in the middle.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     assert(diff::diff_words("foo bar baz"[..], "foo qux baz"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 4);
-    assert(common::check_change(changes[0], 0, 4, 1, 1, false, false));
-    assert(common::check_change(changes[1], 4, 3, 1, 0, false, true));
-    assert(common::check_change(changes[2], 4, 3, 1, 1, true, false));
-    assert(common::check_change(changes[3], 7, 4, 1, 1, false, false));
+    assert(diff_checks::check_change(changes[0], 0, 4, 1, 1, false, false));
+    assert(diff_checks::check_change(changes[1], 4, 3, 1, 0, false, true));
+    assert(diff_checks::check_change(changes[2], 4, 3, 1, 1, true, false));
+    assert(diff_checks::check_change(changes[3], 7, 4, 1, 1, false, false));
     // The white space between the words does not matter.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     assert(diff::diff_words("a  b"[..], "a b"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 1);
-    assert(common::check_change(changes[0], 0, 3, 2, 1, false, false));
+    assert(diff_checks::check_change(changes[0], 0, 3, 2, 1, false, false));
     // The line end is a part of the white space.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     assert(diff::diff_words("foo\nbar baz"[..], "foo baz"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 3);
-    assert(common::check_change(changes[0], 0, 3, 1, 1, false, false));
-    assert(common::check_change(changes[1], 3, 4, 1, 0, false, true));
-    assert(common::check_change(changes[2], 3, 4, 1, 1, false, false));
+    assert(diff_checks::check_change(changes[0], 0, 3, 1, 1, false, false));
+    assert(diff_checks::check_change(changes[1], 3, 4, 1, 0, false, true));
+    assert(diff_checks::check_change(changes[2], 3, 4, 1, 1, false, false));
     // A word with a letter outside ASCII.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     assert(diff::diff_words("caf\xC3\xA9 noir"[..], "caf\xC3\xA9 blanc"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 3);
-    assert(common::check_change(changes[0], 0, 6, 1, 1, false, false));
-    assert(common::check_change(changes[1], 6, 4, 1, 0, false, true));
-    assert(common::check_change(changes[2], 6, 5, 1, 1, true, false));
+    assert(diff_checks::check_change(changes[0], 0, 6, 1, 1, false, false));
+    assert(diff_checks::check_change(changes[1], 6, 4, 1, 0, false, true));
+    assert(diff_checks::check_change(changes[2], 6, 5, 1, 1, true, false));
 }
 
 fn test_token_words_with_space() {
@@ -291,31 +291,31 @@ fn test_token_words_with_space() {
     let o = diff::default_token_options();
     assert(diff::diff_words_with_space("hello world"[..], "hello there"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 3);
-    assert(common::check_change(changes[0], 0, 6, 2, 1, false, false));
-    assert(common::check_change(changes[1], 6, 5, 1, 0, false, true));
-    assert(common::check_change(changes[2], 6, 5, 1, 1, true, false));
+    assert(diff_checks::check_change(changes[0], 0, 6, 2, 1, false, false));
+    assert(diff_checks::check_change(changes[1], 6, 5, 1, 0, false, true));
+    assert(diff_checks::check_change(changes[2], 6, 5, 1, 1, true, false));
     // The white space between the words matters.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     assert(diff::diff_words_with_space("a  b"[..], "a b"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 4);
-    assert(common::check_change(changes[0], 0, 1, 1, 1, false, false));
-    assert(common::check_change(changes[1], 1, 2, 1, 0, false, true));
-    assert(common::check_change(changes[2], 1, 1, 1, 1, true, false));
-    assert(common::check_change(changes[3], 2, 1, 1, 1, false, false));
+    assert(diff_checks::check_change(changes[0], 0, 1, 1, 1, false, false));
+    assert(diff_checks::check_change(changes[1], 1, 2, 1, 0, false, true));
+    assert(diff_checks::check_change(changes[2], 1, 1, 1, 1, true, false));
+    assert(diff_checks::check_change(changes[3], 2, 1, 1, 1, false, false));
     // The line end is a token of its own.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     assert(diff::diff_words_with_space("foo\nbar baz"[..], "foo baz"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 3);
-    assert(common::check_change(changes[0], 0, 3, 1, 1, false, false));
-    assert(common::check_change(changes[1], 3, 4, 2, 0, false, true));
-    assert(common::check_change(changes[2], 3, 4, 2, 1, false, false));
+    assert(diff_checks::check_change(changes[0], 0, 3, 1, 1, false, false));
+    assert(diff_checks::check_change(changes[1], 3, 4, 2, 0, false, true));
+    assert(diff_checks::check_change(changes[2], 3, 4, 2, 1, false, false));
     // A word with a letter outside ASCII.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     assert(diff::diff_words_with_space("caf\xC3\xA9 noir"[..], "caf\xC3\xA9 blanc"[..], o, changes) == diff::ERR_OK);
     assert(changes.len == 3);
-    assert(common::check_change(changes[0], 0, 6, 2, 1, false, false));
-    assert(common::check_change(changes[1], 6, 4, 1, 0, false, true));
-    assert(common::check_change(changes[2], 6, 5, 1, 1, true, false));
+    assert(diff_checks::check_change(changes[0], 0, 6, 2, 1, false, false));
+    assert(diff_checks::check_change(changes[1], 6, 4, 1, 0, false, true));
+    assert(diff_checks::check_change(changes[2], 6, 5, 1, 1, true, false));
 }
 
 fn test_token_word_bounds() {
@@ -345,8 +345,8 @@ fn test_token_word_bounds() {
     assert(diff::diff_words("y"[..], " x"[..], o2, changes) == diff::ERR_OK);
     assert(changes.len == after + 2);
     // A carriage return that stands alone is a part of its own.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     assert(diff::diff_words_with_space("x\r"[..], "x\r"[..], o2, changes) == diff::ERR_OK);
     assert(changes.len == 1);
-    assert(common::check_change(changes[0], 0, 2, 2, 1, false, false));
+    assert(diff_checks::check_change(changes[0], 0, 2, 2, 1, false, false));
 }

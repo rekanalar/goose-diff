@@ -4,10 +4,10 @@ namespace matcher_tests;
 import std;
 import diff from "..";
 import unicode from "rekanalar/goose-unicode@v0.3.0";
-import common;
+import diff_checks;
 
 fn test_matcher_blocks() {
-    let o = common::ro_options();
+    let o = diff_checks::ro_options();
     // The blocks of the matcher, as the Python library difflib gives them.
     var blocks: diff::Match[>..] = [];
     assert(diff::matcher_blocks("a\nb\nc\nd\ne\n", "a\nx\nc\nd\ne\n", o, blocks) == diff::ERR_OK);
@@ -39,7 +39,7 @@ fn test_matcher_blocks() {
 }
 
 fn test_matcher_longest() {
-    let o = common::ro_options();
+    let o = diff_checks::ro_options();
     let a = "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\n";
     let b = "x\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\ny\n";
     let code, m = diff::matcher_longest(a, b, o, 0, 5, 0, 5);
@@ -55,7 +55,7 @@ fn test_matcher_longest() {
 }
 
 fn test_matcher_grouped() {
-    let o = common::ro_options();
+    let o = diff_checks::ro_options();
     let a = "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\n";
     let b = "x\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\ny\n";
     var ops: diff::Op[>..] = [];
@@ -75,7 +75,7 @@ fn test_matcher_grouped() {
 }
 
 fn test_matcher_ratios() {
-    let o = common::ro_options();
+    let o = diff_checks::ro_options();
     let c, r = diff::matcher_ratio("a\nb\nc\nd\ne\n", "a\nx\nc\nd\ne\n", o);
     assert(c == diff::ERR_OK && r > 0.7999999 && r < 0.8000001);
     let c2, q = diff::matcher_quick_ratio("a\nb\nc\nd\ne\n", "a\nx\nc\nd\ne\n", o);
@@ -92,18 +92,18 @@ fn test_matcher_ratios() {
 
 fn test_matcher_junk() {
     // A blank line is junk under the rule JUNK_BLANK.
-    var o = common::ro_options();
+    var o = diff_checks::ro_options();
     o.junk = diff::JUNK_BLANK;
     var ops: diff::Op[>..] = [];
     let c, e = diff::matcher_opcodes("\n", "a\n\n", o, ops);
     assert(c == diff::ERR_OK && ops.len == 1 && ops[0].tag == diff::OP_REPLACE);
     // Without the rule the blank line matches.
     var plain: diff::Op[>..] = [];
-    let c2, e2 = diff::matcher_opcodes("\n", "a\n\n", common::ro_options(), plain);
+    let c2, e2 = diff::matcher_opcodes("\n", "a\n\n", diff_checks::ro_options(), plain);
     assert(c2 == diff::ERR_OK && plain.len == 2);
     assert(plain[0].tag == diff::OP_INSERT && plain[1].tag == diff::OP_EQUAL);
     // A line of one hash sign is junk under the rule JUNK_COMMENT.
-    var o3 = common::ro_options();
+    var o3 = diff_checks::ro_options();
     o3.junk = diff::JUNK_COMMENT;
     var ops3: diff::Op[>..] = [];
     assert(diff::matcher_opcodes("#\n", "a\n#\n", o3, ops3) == diff::ERR_OK);
@@ -122,7 +122,7 @@ fn test_matcher_popular() {
     for k in 250 { a.push('x'); a.push(10); b.push('x'); b.push(10); }
     b[0] = 'y';
     b[499] = 'z';
-    var o = common::ro_options();
+    var o = diff_checks::ro_options();
     o.autojunk = true;
     var blocks: diff::Match[>..] = [];
     assert(diff::matcher_blocks(a[..], b[..], o, blocks) == diff::ERR_OK);
@@ -162,7 +162,7 @@ fn test_matcher_bounds() {
     var a: u8[>..] = [];
     var b: u8[>..] = [];
     for k in 500 { a.push('x'); a.push(10); b.push('x'); b.push(10); }
-    var o = common::ro_options();
+    var o = diff_checks::ro_options();
     o.autojunk = false;
     o.max_work = 1000;
     var ops: diff::Op[>..] = [];
@@ -182,14 +182,14 @@ fn test_matcher_bounds() {
     assert(diff::matcher_opcodes(c[..], d[..], o, ops2) == diff::ERR_TOO_MUCH_WORK);
     assert(ops2.len == 0);
     // A rule out of range is a fault.
-    var o2 = common::ro_options();
+    var o2 = diff_checks::ro_options();
     o2.algorithm = 9;
     var ops3: diff::Op[>..] = [];
     assert(diff::matcher_opcodes("a\n", "b\n", o2, ops3) == diff::ERR_BAD_OPTION);
-    var o3 = common::ro_options();
+    var o3 = diff_checks::ro_options();
     o3.junk = 5;
     assert(diff::matcher_opcodes("a\n", "b\n", o3, ops3) == diff::ERR_BAD_OPTION);
-    var o4 = common::ro_options();
+    var o4 = diff_checks::ro_options();
     o4.max_work = 500000001;
     assert(diff::matcher_opcodes("a\n", "b\n", o4, ops3) == diff::ERR_BAD_OPTION);
 }

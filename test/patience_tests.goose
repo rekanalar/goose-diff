@@ -4,48 +4,48 @@ namespace patience_tests;
 import std;
 import diff from "..";
 import unicode from "rekanalar/goose-unicode@v0.3.0";
-import common;
+import diff_checks;
 
 fn test_patience_lcs() {
     // The cases come from the Rust crate similar 2.7.0.
     var a: i32[>..] = [];
     var b: i32[>..] = [];
-    common::ids_of([11, 1, 2, 2, 3, 4, 4, 4, 5, 47, 19], a);
-    common::ids_of([10, 1, 2, 2, 8, 9, 4, 4, 7, 47, 18], b);
+    diff_checks::ids_of([11, 1, 2, 2, 3, 4, 4, 4, 5, 47, 19], a);
+    diff_checks::ids_of([10, 1, 2, 2, 8, 9, 4, 4, 7, 47, 18], b);
     var out: u8[>..] = [];
-    assert(common::alg_run(a[..], b[..], diff::ALG_PATIENCE, out) == diff::ERR_OK);
+    assert(diff_checks::alg_run(a[..], b[..], diff::ALG_PATIENCE, out) == diff::ERR_OK);
     assert(out[..] == "r0,1,0,1 e1,1,3 r4,1,4,2 e5,6,2 r7,2,8,1 e9,9,1 r10,1,10,1");
     out.resize(0, 0);
-    assert(common::alg_run(a[..], b[..], diff::ALG_LCS, out) == diff::ERR_OK);
+    assert(diff_checks::alg_run(a[..], b[..], diff::ALG_LCS, out) == diff::ERR_OK);
     assert(out[..] == "r0,1,0,1 e1,1,3 r4,2,4,2 e6,6,2 r8,1,8,1 e9,9,1 r10,1,10,1");
     // A case where the three searches differ.
     a.resize(0, 0);
     b.resize(0, 0);
-    common::ids_of([0, 1, 1], a);
-    common::ids_of([1, 0, 1], b);
+    diff_checks::ids_of([0, 1, 1], a);
+    diff_checks::ids_of([1, 0, 1], b);
     out.resize(0, 0);
-    assert(common::alg_run(a[..], b[..], diff::ALG_PATIENCE, out) == diff::ERR_OK);
+    assert(diff_checks::alg_run(a[..], b[..], diff::ALG_PATIENCE, out) == diff::ERR_OK);
     assert(out[..] == "i0,0,1 e0,1,2 d2,1,3");
     out.resize(0, 0);
-    assert(common::alg_run(a[..], b[..], diff::ALG_LCS, out) == diff::ERR_OK);
+    assert(diff_checks::alg_run(a[..], b[..], diff::ALG_LCS, out) == diff::ERR_OK);
     assert(out[..] == "d0,1,0 e1,0,1 i2,1,1 e2,2,1");
     // The patience search finds the sole items of both texts.
     a.resize(0, 0);
     b.resize(0, 0);
-    common::ids_of([1, 2, 3, 4], a);
-    common::ids_of([1, 2, 3], b);
+    diff_checks::ids_of([1, 2, 3, 4], a);
+    diff_checks::ids_of([1, 2, 3], b);
     out.resize(0, 0);
-    assert(common::alg_run(a[..], b[..], diff::ALG_PATIENCE, out) == diff::ERR_OK);
+    assert(diff_checks::alg_run(a[..], b[..], diff::ALG_PATIENCE, out) == diff::ERR_OK);
     assert(out[..] == "e0,0,3 d3,1,3");
     // The LCS search gives the longest common subsequence, also when the
     // texts share a start. The crate similar builds its table from the
     // start of the texts and can miss it.
     a.resize(0, 0);
     b.resize(0, 0);
-    common::ids_of([0, 0, 0, 0, 1, 0, 1, 0, 2, 0], a);
-    common::ids_of([0, 0, 0, 2, 0, 1, 0, 1, 0, 0], b);
+    diff_checks::ids_of([0, 0, 0, 0, 1, 0, 1, 0, 2, 0], a);
+    diff_checks::ids_of([0, 0, 0, 2, 0, 1, 0, 1, 0, 0], b);
     out.resize(0, 0);
-    assert(common::alg_run(a[..], b[..], diff::ALG_LCS, out) == diff::ERR_OK);
+    assert(diff_checks::alg_run(a[..], b[..], diff::ALG_LCS, out) == diff::ERR_OK);
     var kept: i64 = 0;
     var ops: diff::Op[>..] = [];
     let code, exact = diff::diff_ids_alg(a[..], b[..], diff::ALG_LCS, 2000, 50000000, ops);
@@ -55,8 +55,8 @@ fn test_patience_lcs() {
     a.resize(0, 0);
     b.resize(0, 0);
     out.resize(0, 0);
-    assert(common::alg_run(a[..], b[..], diff::ALG_PATIENCE, out) == diff::ERR_OK);
-    assert(common::alg_run(a[..], b[..], diff::ALG_LCS, out) == diff::ERR_OK);
+    assert(diff_checks::alg_run(a[..], b[..], diff::ALG_PATIENCE, out) == diff::ERR_OK);
+    assert(diff_checks::alg_run(a[..], b[..], diff::ALG_LCS, out) == diff::ERR_OK);
     assert(out.len == 0);
 }
 
@@ -106,8 +106,8 @@ fn test_patience_lcs_bounds() {
     // The flag of a small patience diff comes from the check of the minimality.
     var sa: i32[>..] = [];
     var sb: i32[>..] = [];
-    common::ids_of([2, 3, 3, 0, 0], sa);
-    common::ids_of([3, 3, 3, 2, 0], sb);
+    diff_checks::ids_of([2, 3, 3, 0, 0], sa);
+    diff_checks::ids_of([3, 3, 3, 2, 0], sb);
     var sops: diff::Op[>..] = [];
     let c4, e4 = diff::diff_ids_alg(sa[..], sb[..], diff::ALG_PATIENCE, 2000, 50000000, sops);
     assert(c4 == diff::ERR_OK && !e4);
@@ -119,22 +119,22 @@ fn test_patience_lcs_bounds() {
     // negative ids give the same diff as their dense forms, not a crash.
     var ha: i32[>..] = [];
     var hb: i32[>..] = [];
-    common::ids_of([11, 1, 2, 2, 3, 4, 4, 4, 5, 47, 19], ha);
-    common::ids_of([10, 1, 2, 2, 8, 9, 4, 4, 7, 47, 18], hb);
+    diff_checks::ids_of([11, 1, 2, 2, 3, 4, 4, 4, 5, 47, 19], ha);
+    diff_checks::ids_of([10, 1, 2, 2, 8, 9, 4, 4, 7, 47, 18], hb);
     var hops: diff::Op[>..] = [];
     let c5, e5 = diff::diff_ids_alg(ha[..], hb[..], diff::ALG_PATIENCE, 2000, 50000000, hops);
     assert(c5 == diff::ERR_OK);
     var hout: u8[>..] = [];
-    common::ops_text(hops[..], hout);
+    diff_checks::ops_text(hops[..], hout);
     assert(hout[..] == "r0,1,0,1 e1,1,3 r4,1,4,2 e5,6,2 r7,2,8,1 e9,9,1 r10,1,10,1");
     var na2: i32[>..] = [];
     var nb2: i32[>..] = [];
-    common::ids_of([-7, 2147483647, -7, 2147483647], na2);
-    common::ids_of([2147483647, -7], nb2);
+    diff_checks::ids_of([-7, 2147483647, -7, 2147483647], na2);
+    diff_checks::ids_of([2147483647, -7], nb2);
     var nops: diff::Op[>..] = [];
     let c6, e6 = diff::diff_ids_alg(na2[..], nb2[..], diff::ALG_PATIENCE, 2000, 50000000, nops);
     assert(c6 == diff::ERR_OK);
     hout.resize(0, 0);
-    common::ops_text(nops[..], hout);
+    diff_checks::ops_text(nops[..], hout);
     assert(hout[..] == "d0,1,0 e1,0,2 d3,1,2");
 }

@@ -4,24 +4,22 @@ namespace patch_tests;
 import std;
 import diff from "..";
 import unicode from "rekanalar/goose-unicode@v0.3.0";
-import common;
-
-const OLD: const u8[:] = "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\n";
-const NEW: const u8[:] = "a\nB\nc\nd\ne\nf\ng\nh\ni\nj\nk2\nl\nm";
+import diff_checks;
+import sample_texts;
 
 fn test_unified() {
     var out: u8[>..] = [];
-    let c, e = diff::unified_diff(out, OLD, NEW, "o.txt", "n.txt", diff::default_options());
+    let c, e = diff::unified_diff(out, sample_texts::OLD, sample_texts::NEW, "o.txt", "n.txt", diff::default_options());
     // The text of GNU diff -u, without the time stamps.
     assert(c == diff::ERR_OK && e);
     assert(out == "--- o.txt\n+++ n.txt\n@@ -1,5 +1,5 @@\n a\n-b\n+B\n c\n d\n e\n@@ -8,5 +8,6 @@\n h\n i\n j\n-k\n+k2\n l\n+m\n\\ No newline at end of file\n");
     // Equal texts give no output. No change at all, with context 0 too.
     var none: u8[>..] = [];
-    let c2, e2 = diff::unified_diff(none, OLD, OLD, "a", "b", diff::default_options());
+    let c2, e2 = diff::unified_diff(none, sample_texts::OLD, sample_texts::OLD, "a", "b", diff::default_options());
     assert(c2 == diff::ERR_OK && none.len == 0);
     // A name with a line end is a fault and writes nothing.
     var keep: u8[>..] = [1];
-    let c3, e3 = diff::unified_diff(keep, OLD, NEW, "a\n+++ evil", "b", diff::default_options());
+    let c3, e3 = diff::unified_diff(keep, sample_texts::OLD, sample_texts::NEW, "a\n+++ evil", "b", diff::default_options());
     assert(c3 == diff::ERR_BAD_NAME && keep.len == 1);
     // Context 0 gives hunks with no context lines.
     var zero: u8[>..] = [];
@@ -38,28 +36,28 @@ fn test_unified() {
 fn test_patch_fixtures() {
     // Patches from GNU diff, jsdiff and git diff apply to the old text.
     var out: u8[>..] = [];
-    assert(common::apply_text(OLD, "--- o.txt\n+++ n.txt\n@@ -1,5 +1,5 @@\n a\n-b\n+B\n c\n d\n e\n@@ -8,5 +8,6 @@\n h\n i\n j\n-k\n+k2\n l\n+m\n\\ No newline at end of file\n", false, out) == diff::ERR_OK);
-    assert(out == NEW);
+    assert(diff_checks::apply_text(sample_texts::OLD, "--- o.txt\n+++ n.txt\n@@ -1,5 +1,5 @@\n a\n-b\n+B\n c\n d\n e\n@@ -8,5 +8,6 @@\n h\n i\n j\n-k\n+k2\n l\n+m\n\\ No newline at end of file\n", false, out) == diff::ERR_OK);
+    assert(out == sample_texts::NEW);
     var out2: u8[>..] = [];
-    assert(common::apply_text(OLD, "Index: o.txt\n===================================================================\n--- o.txt\n+++ o.txt\n@@ -1,12 +1,13 @@\n a\n-b\n+B\n c\n d\n e\n f\n g\n h\n i\n j\n-k\n+k2\n l\n+m\n\\ No newline at end of file\n", false, out2) == diff::ERR_OK);
-    assert(out2 == NEW);
+    assert(diff_checks::apply_text(sample_texts::OLD, "Index: o.txt\n===================================================================\n--- o.txt\n+++ o.txt\n@@ -1,12 +1,13 @@\n a\n-b\n+B\n c\n d\n e\n f\n g\n h\n i\n j\n-k\n+k2\n l\n+m\n\\ No newline at end of file\n", false, out2) == diff::ERR_OK);
+    assert(out2 == sample_texts::NEW);
     var out3: u8[>..] = [];
-    assert(common::apply_text(OLD, "diff --git a/o.txt b/n.txt\nindex 2f0b8ee..5199a9a 100644\n--- a/o.txt\n+++ b/n.txt\n@@ -1,5 +1,5 @@\n a\n-b\n+B\n c\n d\n e\n@@ -8,5 +8,6 @@ g\n h\n i\n j\n-k\n+k2\n l\n+m\n\\ No newline at end of file\n", false, out3) == diff::ERR_OK);
-    assert(out3 == NEW);
+    assert(diff_checks::apply_text(sample_texts::OLD, "diff --git a/o.txt b/n.txt\nindex 2f0b8ee..5199a9a 100644\n--- a/o.txt\n+++ b/n.txt\n@@ -1,5 +1,5 @@\n a\n-b\n+B\n c\n d\n e\n@@ -8,5 +8,6 @@ g\n h\n i\n j\n-k\n+k2\n l\n+m\n\\ No newline at end of file\n", false, out3) == diff::ERR_OK);
+    assert(out3 == sample_texts::NEW);
     // The reverse apply gives the old text back.
     var back: u8[>..] = [];
-    assert(common::apply_text(NEW, "--- o.txt\n+++ n.txt\n@@ -1,5 +1,5 @@\n a\n-b\n+B\n c\n d\n e\n@@ -8,5 +8,6 @@\n h\n i\n j\n-k\n+k2\n l\n+m\n\\ No newline at end of file\n", true, back) == diff::ERR_OK);
-    assert(back == OLD);
+    assert(diff_checks::apply_text(sample_texts::NEW, "--- o.txt\n+++ n.txt\n@@ -1,5 +1,5 @@\n a\n-b\n+B\n c\n d\n e\n@@ -8,5 +8,6 @@\n h\n i\n j\n-k\n+k2\n l\n+m\n\\ No newline at end of file\n", true, back) == diff::ERR_OK);
+    assert(back == sample_texts::OLD);
 }
 
 fn test_patch_round_trip() {
     for round in 200 {
         var a: u8[>..] = [];
         var b: u8[>..] = [];
-        common::make_text(a, common::rnd(60), 1 + common::rnd(10));
-        common::make_text(b, common::rnd(60), 1 + common::rnd(10));
+        diff_checks::make_text(a, diff_checks::rnd(60), 1 + diff_checks::rnd(10));
+        diff_checks::make_text(b, diff_checks::rnd(60), 1 + diff_checks::rnd(10));
         var o = diff::default_options();
-        o.context = common::rnd(5);
+        o.context = diff_checks::rnd(5);
         var p: u8[>..] = [];
         let c, e = diff::unified_diff(p, a[..], b[..], "a", "b", o);
         assert(c == diff::ERR_OK);
@@ -67,10 +65,10 @@ fn test_patch_round_trip() {
         if p.len == 0 {
             assert(a.len == b.len);
         } else {
-            assert(common::apply_text(a[..], p[..], false, out) == diff::ERR_OK);
+            assert(diff_checks::apply_text(a[..], p[..], false, out) == diff::ERR_OK);
             assert(out == b[..]);
             var back: u8[>..] = [];
-            assert(common::apply_text(b[..], p[..], true, back) == diff::ERR_OK);
+            assert(diff_checks::apply_text(b[..], p[..], true, back) == diff::ERR_OK);
             assert(back == a[..]);
         }
     }
@@ -79,19 +77,19 @@ fn test_patch_round_trip() {
 fn test_patch_shift() {
     // A hunk finds its place when lines come before it.
     var p: u8[>..] = [];
-    let c, e = diff::unified_diff(p, OLD, NEW, "a", "b", diff::default_options());
+    let c, e = diff::unified_diff(p, sample_texts::OLD, sample_texts::NEW, "a", "b", diff::default_options());
     var moved: u8[>..] = [];
     for k in 10 { moved.push('z'); moved.push(10); }
-    for ch in OLD { moved.push(ch); }
+    for ch in sample_texts::OLD { moved.push(ch); }
     var out: u8[>..] = [];
-    assert(common::apply_text(moved[..], p[..], false, out) == diff::ERR_OK);
+    assert(diff_checks::apply_text(moved[..], p[..], false, out) == diff::ERR_OK);
     var want: u8[>..] = [];
     for k in 10 { want.push('z'); want.push(10); }
-    for ch in NEW { want.push(ch); }
+    for ch in sample_texts::NEW { want.push(ch); }
     assert(out == want[..]);
     // A text that differs in a context line is a fault and writes nothing.
     var keep: u8[>..] = [7];
-    assert(common::apply_text("a\nb\nc\nd\ne\nf\ng\nh\ni\nJ\nk\nl\n", p[..], false, keep) == diff::ERR_NO_MATCH);
+    assert(diff_checks::apply_text("a\nb\nc\nd\ne\nf\ng\nh\ni\nJ\nk\nl\n", p[..], false, keep) == diff::ERR_NO_MATCH);
     assert(keep.len == 1);
 }
 
@@ -121,7 +119,7 @@ fn test_patch_hostile() {
     assert(f2.len == 0 && h2.len == 0 && b2.len == 0);
     // A hunk header far past the text is clamped, not searched step by step.
     var out: u8[>..] = [];
-    assert(common::apply_text("x\n", "--- a\n+++ b\n@@ -999999999999999 +1 @@\n-x\n+y\n", false, out) == diff::ERR_OK);
+    assert(diff_checks::apply_text("x\n", "--- a\n+++ b\n@@ -999999999999999 +1 @@\n-x\n+y\n", false, out) == diff::ERR_OK);
     assert(out == "y\n");
     // A search over many equal lines spends from the budget.
     var big: u8[>..] = [];

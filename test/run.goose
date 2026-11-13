@@ -8,13 +8,16 @@ import patch_tests;
 import matcher_tests;
 import token_tests;
 import ndiff_tests;
+import context_tests;
+import css_tests;
 import json_tests;
 import patience_tests;
 import spatch_tests;
 import html_tests;
 import unicode_tests;
 import inline_tests;
-import common;
+import diff_checks;
+import sample_texts;
 import unicode from "rekanalar/goose-unicode@v0.3.0";
 
 fn main() {
@@ -48,8 +51,8 @@ fn main() {
     ndiff_tests::test_ndiff();
     ndiff_tests::test_ndiff_restore();
     ndiff_tests::test_ndiff_bounds();
-    ndiff_tests::test_context();
-    ndiff_tests::test_css();
+    context_tests::test_context();
+    css_tests::test_css();
     json_tests::test_json_canonical();
     json_tests::test_json_diff();
     json_tests::test_json_bounds();

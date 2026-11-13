@@ -4,27 +4,27 @@ namespace json_tests;
 import std;
 import diff from "..";
 import unicode from "rekanalar/goose-unicode@v0.3.0";
-import common;
+import diff_checks;
 
 fn test_json_canonical() {
     var out: u8[>..] = [];
-    assert(common::json_form("{\"b\":1,\"a\":[true,null,{}],\"c\":{}}", out) == diff::ERR_OK);
+    assert(diff_checks::json_form("{\"b\":1,\"a\":[true,null,{}],\"c\":{}}", out) == diff::ERR_OK);
     assert(out[..] == "{\n  \"a\": [\n    true,\n    null,\n    {}\n  ],\n  \"b\": 1,\n  \"c\": {}\n}");
     // Array indexes come first, then the other keys. The last duplicate wins.
     out.resize(0, 0);
-    assert(common::json_form("{\"b\":1,\"10\":2,\"2\":3,\"b\":4}", out) == diff::ERR_OK);
+    assert(diff_checks::json_form("{\"b\":1,\"10\":2,\"2\":3,\"b\":4}", out) == diff::ERR_OK);
     assert(out[..] == "{\n  \"2\": 3,\n  \"10\": 2,\n  \"b\": 4\n}");
     // The numbers follow JavaScript.
     out.resize(0, 0);
-    assert(common::json_form("[1.0,1e2,-0,1e21,1e-7,0.000001,123456789012345678901,1e400,0.1]", out) == diff::ERR_OK);
+    assert(diff_checks::json_form("[1.0,1e2,-0,1e21,1e-7,0.000001,123456789012345678901,1e400,0.1]", out) == diff::ERR_OK);
     assert(out[..] == "[\n  1,\n  100,\n  0,\n  1e+21,\n  1e-7,\n  0.000001,\n  123456789012345680000,\n  null,\n  0.1\n]");
     // The strings escape as JSON.stringify writes them.
     out.resize(0, 0);
-    assert(common::json_form("\"a\\u0001\\ud800\\n/\"", out) == diff::ERR_OK);
+    assert(diff_checks::json_form("\"a\\u0001\\ud800\\n/\"", out) == diff::ERR_OK);
     assert(out[..] == "\"a\\u0001\\ud800\\n/\"");
     // A UTF-16 sort puts U+FFFF before a character above U+FFFF.
     out.resize(0, 0);
-    assert(common::json_form("{\"\\ud83d\\ude00\":1,\"\\uffee\":2}", out) == diff::ERR_OK);
+    assert(diff_checks::json_form("{\"\\ud83d\\ude00\":1,\"\\uffee\":2}", out) == diff::ERR_OK);
     assert(out[..] == "{\n  \"😀\": 1,\n  \"￮\": 2\n}");
 }
 
@@ -40,18 +40,18 @@ fn test_json_diff() {
     assert(ca[..] == "{\n  \"a\": 1,\n  \"b\": 2\n}");
     assert(cb[..] == "{\n  \"a\": 3,\n  \"b\": 2\n}");
     assert(changes.len == 4);
-    assert(common::change_text(changes[1], ca[..], cb[..]) == "  \"a\": 1,\n");
+    assert(diff_checks::change_text(changes[1], ca[..], cb[..]) == "  \"a\": 1,\n");
     assert(changes[1].removed);
-    assert(common::change_text(changes[2], ca[..], cb[..]) == "  \"a\": 3,\n");
+    assert(diff_checks::change_text(changes[2], ca[..], cb[..]) == "  \"a\": 3,\n");
     assert(changes[2].added);
     // A line that differs by a comma is equal and the longer line stays.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     assert(diff::diff_json_text("x,\ny\n", "x\ny,\n", o, changes) == diff::ERR_OK);
     assert(changes.len == 2);
     assert(!changes[0].added && !changes[0].removed && changes[0].text == 0);
     assert(!changes[1].added && !changes[1].removed && changes[1].text == 1);
     // A fault leaves the buffers as they were.
-    common::clear_changes(changes);
+    diff_checks::clear_changes(changes);
     assert(diff::diff_json("{", b, o, ca, cb, changes) == diff::ERR_BAD_JSON);
     assert(diff::diff_json(a, "[1,]", o, ca, cb, changes) == diff::ERR_BAD_JSON);
     assert(ca.len > 1 && changes.len == 0);

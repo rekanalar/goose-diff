@@ -17,6 +17,8 @@ import unified;
 import patch;
 import matcher;
 import tokens;
+import token_diff;
+import word_diff;
 import context;
 import cssdiff;
 import inline;
@@ -26,6 +28,7 @@ import spatch;
 import spatchapply;
 import converts;
 import htmldiff;
+import html_output;
 import jsondiff;
 import ndiff;
 

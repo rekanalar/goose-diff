@@ -4,27 +4,27 @@ namespace ndiff_tests;
 import std;
 import diff from "..";
 import unicode from "rekanalar/goose-unicode@v0.3.0";
-import common;
+import diff_checks;
 
 fn test_ndiff() {
     var d: u8[>..] = [];
     // The example of the Python documentation.
-    assert(common::nd_run("one\ntwo\nthree\n", "ore\ntree\nemu\n", diff::default_options(), d) == diff::ERR_OK);
+    assert(diff_checks::nd_run("one\ntwo\nthree\n", "ore\ntree\nemu\n", diff::default_options(), d) == diff::ERR_OK);
     assert(d[..] == "- one\n?  ^\n+ ore\n?  ^\n- two\n- three\n?  -\n+ tree\n+ emu\n");
     d.resize(0, 0);
-    assert(common::nd_run("same\nalpha\nbravo\n", "same\nalpha\nbravo!\n", diff::default_options(), d) == diff::ERR_OK);
+    assert(diff_checks::nd_run("same\nalpha\nbravo\n", "same\nalpha\nbravo!\n", diff::default_options(), d) == diff::ERR_OK);
     assert(d[..] == "  same\n  alpha\n- bravo\n+ bravo!\n?      +\n");
     // The tab stays in the line of hints, so the marks line up.
     d.resize(0, 0);
-    assert(common::nd_run("\tabcDefghiJkl\n", "\tabcdefGhijkl\n", diff::default_options(), d) == diff::ERR_OK);
+    assert(diff_checks::nd_run("\tabcDefghiJkl\n", "\tabcdefGhijkl\n", diff::default_options(), d) == diff::ERR_OK);
     assert(d[..] == "- \tabcDefghiJkl\n? \t   ^  ^  ^\n+ \tabcdefGhijkl\n? \t   ^  ^  ^\n");
     // A line without a line end gets one.
     d.resize(0, 0);
-    assert(common::nd_run("a", "b", diff::default_options(), d) == diff::ERR_OK);
+    assert(diff_checks::nd_run("a", "b", diff::default_options(), d) == diff::ERR_OK);
     assert(d[..] == "- a\n+ b\n");
     // Empty texts.
     d.resize(0, 0);
-    assert(common::nd_run(""[..], ""[..], diff::default_options(), d) == diff::ERR_OK);
+    assert(diff_checks::nd_run(""[..], ""[..], diff::default_options(), d) == diff::ERR_OK);
     assert(d.len == 0);
 }
 
@@ -32,7 +32,7 @@ fn test_ndiff_restore() {
     var d: u8[>..] = [];
     let a = "one\ntwo\nthree\n";
     let b = "ore\ntree\nemu\n";
-    assert(common::nd_run(a, b, diff::default_options(), d) == diff::ERR_OK);
+    assert(diff_checks::nd_run(a, b, diff::default_options(), d) == diff::ERR_OK);
     var r1: u8[>..] = [];
     var r2: u8[>..] = [];
     assert(diff::ndiff_restore(d[..], 1, r1) == diff::ERR_OK);
@@ -98,54 +98,4 @@ fn test_ndiff_bounds() {
     for i in 50 { h.push(0xff); h.push(13); h.push(10); g.push(0x80); g.push(13); g.push(10); }
     var hd: u8[>..] = [];
     assert(diff::ndiff(h[..], g[..], diff::default_options(), hd) == diff::ERR_OK);
-}
-
-fn test_context() {
-    var d: u8[>..] = [];
-    let code, exact = diff::context_diff(d, "one\ntwo\nthree\nfour\n", "zero\none\ntree\nfour\n",
-                                         "Original", "Current", diff::default_options());
-    assert(code == diff::ERR_OK);
-    assert(d[..] == "*** Original\n--- Current\n***************\n*** 1,4 ****\n  one\n! two\n! three\n  four\n--- 1,4 ----\n+ zero\n  one\n! tree\n  four\n");
-    // A pure insert has no lines in the first part. A pure delete has none in the second.
-    d.resize(0, 0);
-    assert(diff::context_diff(d, "a\n", "a\nb\n", "x", "y", diff::default_options()) == diff::ERR_OK);
-    assert(d[..] == "*** x\n--- y\n***************\n*** 1 ****\n--- 1,2 ----\n  a\n+ b\n");
-    d.resize(0, 0);
-    assert(diff::context_diff(d, "a\nb\n", "a\n", "x", "y", diff::default_options()) == diff::ERR_OK);
-    assert(d[..] == "*** x\n--- y\n***************\n*** 1,2 ****\n  a\n- b\n--- 1 ----\n");
-    // Equal texts give nothing.
-    d.resize(0, 0);
-    assert(diff::context_diff(d, "a\n", "a\n", "x", "y", diff::default_options()) == diff::ERR_OK);
-    assert(d.len == 0);
-    // A name with a line end is a fault and the buffer stays.
-    d.push('k');
-    assert(diff::context_diff(d, "a\n", "b\n", "x\ny", "y", diff::default_options()) == diff::ERR_BAD_NAME);
-    assert(d.len == 1);
-    var small = diff::default_options();
-    small.max_input = 1;
-    assert(diff::context_diff(d, "aa\n", "b\n", "x", "y", small) == diff::ERR_TOO_LARGE);
-    // A line without a line end gets the marker line.
-    d.resize(0, 0);
-    assert(diff::context_diff(d, "a", "b", "x", "y", diff::default_options()) == diff::ERR_OK);
-    assert(d[..] == "*** x\n--- y\n***************\n*** 1 ****\n! a\n\\ No newline at end of file\n--- 1 ----\n! b\n\\ No newline at end of file\n");
-}
-
-fn test_css() {
-    var changes: diff::Change[>..] = [];
-    let o = diff::default_token_options();
-    let a = "a{b:c}";
-    let b = "a{b:d}";
-    assert(diff::diff_css(a, b, o, changes) == diff::ERR_OK);
-    assert(changes.len == 4);
-    common::check_change(changes[0], 0, 4, 4, 1, false, false);
-    common::check_change(changes[1], 4, 1, 1, 0, false, true);
-    common::check_change(changes[2], 4, 1, 1, 1, true, false);
-    common::check_change(changes[3], 5, 1, 1, 1, false, false);
-    // White space is a token of its own and it matters.
-    common::clear_changes(changes);
-    assert(diff::diff_css("a  b", "a b", o, changes) == diff::ERR_OK);
-    assert(changes.len == 4);
-    common::clear_changes(changes);
-    assert(diff::diff_css(""[..], ""[..], o, changes) == diff::ERR_OK);
-    assert(changes.len == 0);
 }

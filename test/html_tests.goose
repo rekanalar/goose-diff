@@ -4,7 +4,7 @@ namespace html_tests;
 import std;
 import diff from "..";
 import unicode from "rekanalar/goose-unicode@v0.3.0";
-import common;
+import diff_checks;
 
 // test_html pins the bytes of Python 3.14 and the safe behavior.
 fn test_html() {
@@ -59,9 +59,9 @@ fn test_html() {
     // The text and the descriptions are escaped. Python escapes neither description.
     var hd: u8[>..] = [];
     assert(diff::html_table("<script>alert(1)</script>\n", "b\n", "<i onclick=\"x\">&", "'y'>", diff::default_options(), diff::default_html_options(), hd) == diff::ERR_OK);
-    assert(!common::has(hd[..], "<script>") && !common::has(hd[..], "<i onclick"));
-    assert(common::has(hd[..], "&lt;script&gt;alert(1)&lt;/script&gt;"));
-    assert(common::has(hd[..], "&lt;i onclick=&quot;x&quot;&gt;&amp;"));
+    assert(!diff_checks::has(hd[..], "<script>") && !diff_checks::has(hd[..], "<i onclick"));
+    assert(diff_checks::has(hd[..], "&lt;script&gt;alert(1)&lt;/script&gt;"));
+    assert(diff_checks::has(hd[..], "&lt;i onclick=&quot;x&quot;&gt;&amp;"));
     // The bytes that serve as marks are a fault and change nothing.
     var nb: u8[>..] = ['k'];
     var bad: u8[>..] = ['a', 0, 'b', 10];
@@ -99,24 +99,24 @@ fn test_html() {
 // rule autoConvertLineEndings of jsdiff does it.
 fn test_line_ends() {
     // A patch with LF applies to a text with CRLF, and the result keeps CRLF.
-    let c1, r1 = common::le_apply("a\nb\nc\n", "a\nB\nc\n", "a\r\nb\r\nc\r\n", true);
+    let c1, r1 = diff_checks::le_apply("a\nb\nc\n", "a\nB\nc\n", "a\r\nb\r\nc\r\n", true);
     assert(c1 == diff::ERR_OK);
     assert(r1[..] == "a\r\nB\r\nc\r\n");
-    let c2, r2 = common::le_apply("a\nb\nc\n", "a\nB\nc\n", "a\r\nb\r\nc\r\n", false);
+    let c2, r2 = diff_checks::le_apply("a\nb\nc\n", "a\nB\nc\n", "a\r\nb\r\nc\r\n", false);
     assert(c2 == diff::ERR_NO_MATCH);
     assert(r2.len == 0);
     // A patch with CRLF applies to a text with LF, and the result keeps LF.
-    let c3, r3 = common::le_apply("a\r\nb\r\nc\r\n", "a\r\nB\r\nc\r\n", "a\nb\nc\n", true);
+    let c3, r3 = diff_checks::le_apply("a\r\nb\r\nc\r\n", "a\r\nB\r\nc\r\n", "a\nb\nc\n", true);
     assert(c3 == diff::ERR_OK);
     assert(r3[..] == "a\nB\nc\n");
-    let c4, r4 = common::le_apply("a\r\nb\r\nc\r\n", "a\r\nB\r\nc\r\n", "a\nb\nc\n", false);
+    let c4, r4 = diff_checks::le_apply("a\r\nb\r\nc\r\n", "a\r\nB\r\nc\r\n", "a\nb\nc\n", false);
     assert(c4 == diff::ERR_NO_MATCH);
     // The last line has no line end: no carriage return is added.
-    let c5, r5 = common::le_apply("a\nb\nc", "a\nb\nC", "a\r\nb\r\nc", true);
+    let c5, r5 = diff_checks::le_apply("a\nb\nc", "a\nb\nC", "a\r\nb\r\nc", true);
     assert(c5 == diff::ERR_OK);
     assert(r5[..] == "a\r\nb\r\nC");
     // A text with mixed line ends gets no conversion.
-    let c6, r6 = common::le_apply("a\nb\nc\n", "a\nB\nc\n", "a\r\nb\nc\n", true);
+    let c6, r6 = diff_checks::le_apply("a\nb\nc\n", "a\nB\nc\n", "a\r\nb\nc\n", true);
     assert(c6 == diff::ERR_NO_MATCH);
     assert(r6.len == 0);
 }
